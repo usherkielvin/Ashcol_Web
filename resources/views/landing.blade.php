@@ -136,19 +136,49 @@
                     <div class="contact-item"><i class="fas fa-envelope"></i><div><h3>Email</h3><p><a href="mailto:headoffice@ashcol.com.ph">headoffice@ashcol.com.ph</a></p></div></div>
                 </div>
                 <div class="contact-form">
-                    <form id="contactForm">
-                        <div class="form-group"><input type="text" id="name" name="name" placeholder="Your Name" required></div>
-                        <div class="form-group"><input type="email" id="email" name="email" placeholder="Your Email" required></div>
-                        <div class="form-group"><input type="tel" id="phone" name="phone" placeholder="Your Phone" required></div>
+                    @if(session('status'))
+                        <div style="background:#d1fae5;color:#065f46;padding:10px;border-radius:8px;margin-bottom:10px;">
+                            {{ session('status') }}
+                        </div>
+                    @endif
+                    <form id="contactForm" method="POST" action="{{ route('contact.store') }}">
+                        @csrf
+                        <div class="form-group">
+                            <input type="text" id="name" name="name" placeholder="Your Name" value="{{ old('name') }}" required>
+                            @error('name')
+                                <div style="color:#b91c1c;font-size:0.9rem;margin-top:6px;">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <div class="form-group">
+                            <input type="email" id="email" name="email" placeholder="Your Email" value="{{ old('email') }}" required>
+                            @error('email')
+                                <div style="color:#b91c1c;font-size:0.9rem;margin-top:6px;">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <div class="form-group">
+                            <input type="tel" id="phone" name="phone" placeholder="Your Phone" value="{{ old('phone') }}" required>
+                            @error('phone')
+                                <div style="color:#b91c1c;font-size:0.9rem;margin-top:6px;">{{ $message }}</div>
+                            @enderror
+                        </div>
                         <div class="form-group"><select id="service" name="service" required>
                             <option value="">Select Service</option>
-                            <option value="installation">Installation</option>
-                            <option value="repair">Repair</option>
-                            <option value="maintenance">Maintenance</option>
-                            <option value="consultation">Consultation</option>
-                            <option value="other">Other</option>
-                        </select></div>
-                        <div class="form-group"><textarea id="message" name="message" placeholder="Describe your needs..." rows="5" required></textarea></div>
+                            <option value="installation" {{ old('service')=='installation' ? 'selected' : '' }}>Installation</option>
+                            <option value="repair" {{ old('service')=='repair' ? 'selected' : '' }}>Repair</option>
+                            <option value="maintenance" {{ old('service')=='maintenance' ? 'selected' : '' }}>Maintenance</option>
+                            <option value="consultation" {{ old('service')=='consultation' ? 'selected' : '' }}>Consultation</option>
+                            <option value="other" {{ old('service')=='other' ? 'selected' : '' }}>Other</option>
+                        </select>
+                        @error('service')
+                            <div style="color:#b91c1c;font-size:0.9rem;margin-top:6px;">{{ $message }}</div>
+                        @enderror
+                        </div>
+                        <div class="form-group">
+                            <textarea id="message" name="message" placeholder="Describe your needs..." rows="5" required>{{ old('message') }}</textarea>
+                            @error('message')
+                                <div style="color:#b91c1c;font-size:0.9rem;margin-top:6px;">{{ $message }}</div>
+                            @enderror
+                        </div>
                         <button type="submit" class="btn btn-primary">Send Message</button>
                     </form>
                 </div>
