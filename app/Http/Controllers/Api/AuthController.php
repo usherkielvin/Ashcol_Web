@@ -64,6 +64,14 @@ class AuthController extends Controller
                 'password' => 'required|string|min:8|confirmed',
                 'password_confirmation' => 'required|string|min:8',
                 'role' => 'nullable|string|in:admin,staff,customer',
+            ], [
+                'email.unique' => 'Email already used',
+                'email.required' => 'Email is required',
+                'email.email' => 'Please enter a valid email address',
+                'name.required' => 'Name is required',
+                'password.required' => 'Password is required',
+                'password.min' => 'Password must be at least 8 characters',
+                'password.confirmed' => 'Passwords do not match',
             ]);
 
             // Generate verification code
@@ -110,13 +118,26 @@ class AuthController extends Controller
                 ],
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            $errors = $e->errors();
+            $errorMessage = 'Validation failed';
+            
+            // Create a user-friendly error message
+            if (isset($errors['email'])) {
+                foreach ($errors['email'] as $emailError) {
+                    if (str_contains(strtolower($emailError), 'already') || str_contains(strtolower($emailError), 'taken')) {
+                        $errorMessage = 'Email already used';
+                        break;
+                    }
+                }
+            }
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Validation failed',
+                'message' => $errorMessage,
                 'errors' => [
-                    'name' => $e->errors()['name'] ?? null,
-                    'email' => $e->errors()['email'] ?? null,
-                    'password' => $e->errors()['password'] ?? null,
+                    'name' => $errors['name'] ?? null,
+                    'email' => $errors['email'] ?? null,
+                    'password' => $errors['password'] ?? null,
                 ],
             ], 422);
         } catch (\Exception $e) {
