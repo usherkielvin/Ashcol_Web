@@ -66,7 +66,20 @@ class AuthController extends Controller
             'firstName' => 'required|string|max:255',
             'lastName' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8',
+            'password' => 'required|string|min:8|confirmed',
+            'password_confirmation' => 'required|string|min:8',
+        ], [
+            'email.unique' => 'Email already used',
+            'email.required' => 'Email is required',
+            'email.email' => 'Please enter a valid email address',
+            'username.unique' => 'Username already taken',
+            'username.required' => 'Username is required',
+            'firstName.required' => 'First name is required',
+            'lastName.required' => 'Last name is required',
+            'password.required' => 'Password is required',
+            'password.min' => 'Password must be at least 8 characters',
+            'password.confirmed' => 'Passwords do not match',
+            'password_confirmation.required' => 'Password confirmation is required',
         ]);
 
         if ($validator->fails()) {
@@ -78,30 +91,12 @@ class AuthController extends Controller
         }
 
         try {
-<<<<<<< HEAD
-=======
-            $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'email' => 'required|string|email|max:255|unique:users',
-                'password' => 'required|string|min:8|confirmed',
-                'password_confirmation' => 'required|string|min:8',
-                'role' => 'nullable|string|in:admin,staff,customer',
-            ], [
-                'email.unique' => 'Email already used',
-                'email.required' => 'Email is required',
-                'email.email' => 'Please enter a valid email address',
-                'name.required' => 'Name is required',
-                'password.required' => 'Password is required',
-                'password.min' => 'Password must be at least 8 characters',
-                'password.confirmed' => 'Passwords do not match',
-            ]);
-
             // Generate verification code
             $verificationCode = EmailVerification::generateCode();
             
             // Store verification code (expires in 10 minutes)
             EmailVerification::updateOrCreate(
-                ['email' => $validated['email']],
+                ['email' => $request->email],
                 [
                     'code' => $verificationCode,
                     'expires_at' => now()->addMinutes(10),
@@ -109,30 +104,31 @@ class AuthController extends Controller
                 ]
             );
 
-            // Send verification email
-            try {
-                Mail::to($validated['email'])->send(new VerificationCode($verificationCode, $validated['name']));
-            } catch (\Exception $e) {
-                // Log error but continue (for development, email might not be configured)
-                \Log::error('Failed to send verification email: ' . $e->getMessage());
-            }
-
-            // Create user but don't log them in yet (wait for verification)
->>>>>>> 8b34bedbabf6df8ff9b19b72d668bdb72ad2eb95
+            // Create user
             $user = User::create([
                 'username' => $request->username,
                 'firstName' => $request->firstName,
                 'lastName' => $request->lastName,
+                'name' => trim($request->firstName . ' ' . $request->lastName),
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
                 'role' => 'customer',
             ]);
 
+            // Send verification email
+            try {
+                $userName = trim($request->firstName . ' ' . $request->lastName);
+                Mail::to($request->email)->send(new VerificationCode($verificationCode, $userName));
+            } catch (\Exception $e) {
+                // Log error but continue (for development, email might not be configured)
+                \Log::error('Failed to send verification email: ' . $e->getMessage());
+            }
+
             $token = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
                 'success' => true,
-                'message' => 'Registration successful',
+                'message' => 'Registration successful. Please verify your email.',
                 'data' => [
                     'user' => [
                         'id' => $user->id,
@@ -146,33 +142,6 @@ class AuthController extends Controller
                     'requires_verification' => true,
                 ]
             ], 201);
-<<<<<<< HEAD
-
-=======
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            $errors = $e->errors();
-            $errorMessage = 'Validation failed';
-            
-            // Create a user-friendly error message
-            if (isset($errors['email'])) {
-                foreach ($errors['email'] as $emailError) {
-                    if (str_contains(strtolower($emailError), 'already') || str_contains(strtolower($emailError), 'taken')) {
-                        $errorMessage = 'Email already used';
-                        break;
-                    }
-                }
-            }
-            
-            return response()->json([
-                'success' => false,
-                'message' => $errorMessage,
-                'errors' => [
-                    'name' => $errors['name'] ?? null,
-                    'email' => $errors['email'] ?? null,
-                    'password' => $errors['password'] ?? null,
-                ],
-            ], 422);
->>>>>>> 8b34bedbabf6df8ff9b19b72d668bdb72ad2eb95
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -213,7 +182,9 @@ class AuthController extends Controller
 
         // Send verification email
         try {
-            Mail::to($request->email)->send(new VerificationCode($verificationCode, $user->name));
+            // Use name if available, otherwise use firstName + lastName
+            $userName = $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
+            Mail::to($request->email)->send(new VerificationCode($verificationCode, $userName));
             
             return response()->json([
                 'success' => true,
