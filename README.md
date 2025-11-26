@@ -18,7 +18,7 @@
 ### User Roles & Access
 
 #### 👤 **Customers**
-- Create and manage service tickets
+- Create and manage service ticketss
 - View ticket status and history
 - Access customer dashboard
 - Manage profile
