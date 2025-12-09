@@ -14,13 +14,25 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated',
+            ], 401);
+        }
+
         return response()->json([
             'success' => true,
             'data' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
+                'user' => [
+                    'id' => $user->id,
+                    'username' => $user->username,
+                    'firstName' => $user->firstName,
+                    'lastName' => $user->lastName,
+                    'name' => $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? '')),
+                    'email' => $user->email,
+                    'role' => $user->role,
+                ],
             ],
         ]);
     }

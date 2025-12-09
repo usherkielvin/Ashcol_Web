@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\EmailVerification;
 use App\Mail\VerificationCode;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Database\QueryException;
 
 class AuthController extends Controller
 {
@@ -116,42 +117,69 @@ class AuthController extends Controller
      */
     public function register(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'username' => 'required|string|max:255|unique:users',
-            'firstName' => 'required|string|max:255',
-            'lastName' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8|confirmed',
-            'password_confirmation' => 'required|string|min:8',
-        ], [
-            'email.unique' => 'Email already used',
-            'email.required' => 'Email is required',
-            'email.email' => 'Please enter a valid email address',
-            'username.unique' => 'Username already taken',
-            'username.required' => 'Username is required',
-            'firstName.required' => 'First name is required',
-            'lastName.required' => 'Last name is required',
-            'password.required' => 'Password is required',
-            'password.min' => 'Password must be at least 8 characters',
-            'password.confirmed' => 'Passwords do not match',
-            'password_confirmation.required' => 'Password confirmation is required',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation Error',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
+            // Normalize input data to handle both camelCase and snake_case
+            $input = $request->all();
+            
+            // Handle alternative field names
+            if (isset($input['first_name']) && !isset($input['firstName'])) {
+                $input['firstName'] = $input['first_name'];
+            }
+            if (isset($input['last_name']) && !isset($input['lastName'])) {
+                $input['lastName'] = $input['last_name'];
+            }
+            if (isset($input['passwordConfirmation']) && !isset($input['password_confirmation'])) {
+                $input['password_confirmation'] = $input['passwordConfirmation'];
+            }
+            
+            // Log incoming request data for debugging (excluding passwords)
+            \Log::info('Registration request received', [
+                'data' => array_intersect_key($input, array_flip(['username', 'firstName', 'lastName', 'email'])),
+                'has_password' => isset($input['password']),
+                'has_password_confirmation' => isset($input['password_confirmation']),
+            ]);
+
+            $validator = Validator::make($input, [
+                'username' => 'required|string|max:255|unique:users',
+                'firstName' => 'required|string|max:255',
+                'lastName' => 'required|string|max:255',
+                'email' => 'required|string|email|max:255|unique:users',
+                'password' => 'required|string|min:8|confirmed',
+                'password_confirmation' => 'required|string|min:8',
+            ], [
+                'email.unique' => 'Email already used',
+                'email.required' => 'Email is required',
+                'email.email' => 'Please enter a valid email address',
+                'username.unique' => 'Username already taken',
+                'username.required' => 'Username is required',
+                'firstName.required' => 'First name is required',
+                'lastName.required' => 'Last name is required',
+                'password.required' => 'Password is required',
+                'password.min' => 'Password must be at least 8 characters',
+                'password.confirmed' => 'Passwords do not match',
+                'password_confirmation.required' => 'Password confirmation is required',
+                'password_confirmation.min' => 'Password confirmation must be at least 8 characters',
+            ]);
+
+            if ($validator->fails()) {
+                \Log::warning('Registration validation failed', [
+                    'errors' => $validator->errors()->toArray(),
+                    'request_data' => array_intersect_key($input, array_flip(['username', 'firstName', 'lastName', 'email'])),
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation Error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
             // Generate verification code
             $verificationCode = EmailVerification::generateCode();
             
             // Store verification code (expires in 10 minutes)
             EmailVerification::updateOrCreate(
-                ['email' => $request->email],
+                ['email' => $input['email']],
                 [
                     'code' => $verificationCode,
                     'expires_at' => now()->addMinutes(10),
@@ -161,19 +189,19 @@ class AuthController extends Controller
 
             // Create user
             $user = User::create([
-                'username' => $request->username,
-                'firstName' => $request->firstName,
-                'lastName' => $request->lastName,
-                'name' => trim($request->firstName . ' ' . $request->lastName),
-                'email' => $request->email,
-                'password' => Hash::make($request->password),
+                'username' => $input['username'],
+                'firstName' => $input['firstName'],
+                'lastName' => $input['lastName'],
+                'name' => trim($input['firstName'] . ' ' . $input['lastName']),
+                'email' => $input['email'],
+                'password' => Hash::make($input['password']),
                 'role' => 'customer',
             ]);
 
             // Send verification email
             try {
-                $userName = trim($request->firstName . ' ' . $request->lastName);
-                Mail::to($request->email)->send(new VerificationCode($verificationCode, $userName));
+                $userName = trim($input['firstName'] . ' ' . $input['lastName']);
+                Mail::to($input['email'])->send(new VerificationCode($verificationCode, $userName));
             } catch (\Exception $e) {
                 // Log error but continue (for development, email might not be configured)
                 \Log::error('Failed to send verification email: ' . $e->getMessage());
@@ -197,10 +225,36 @@ class AuthController extends Controller
                     'requires_verification' => true,
                 ]
             ], 201);
-        } catch (\Exception $e) {
+        } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Registration failed: ' . $e->getMessage()
+                'message' => 'Validation Error',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Log database errors with full details
+            \Log::error('Registration database error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'request_data' => array_intersect_key($input ?? $request->all(), array_flip(['username', 'firstName', 'lastName', 'email']))
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Server error. Please check your Laravel server logs and try again.'
+            ], 500);
+        } catch (\Exception $e) {
+            // Log all other errors with full details
+            \Log::error('Registration error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'request_data' => array_intersect_key($input ?? $request->all(), array_flip(['username', 'firstName', 'lastName', 'email']))
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Server error. Please check your Laravel server logs and try again.'
             ], 500);
         }
     }
