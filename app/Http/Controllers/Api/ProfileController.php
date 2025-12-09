@@ -26,12 +26,12 @@ class ProfileController extends Controller
             'data' => [
                 'user' => [
                     'id' => $user->id,
-                    'username' => $user->username,
-                    'firstName' => $user->firstName,
-                    'lastName' => $user->lastName,
+                    'username' => $user->username ?? '',
+                    'firstName' => $user->firstName ?? '',
+                    'lastName' => $user->lastName ?? '',
                     'name' => $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? '')),
-                    'email' => $user->email,
-                    'role' => $user->role,
+                    'email' => $user->email ?? '',
+                    'role' => $user->role ?? 'customer',
                 ],
             ],
         ]);
