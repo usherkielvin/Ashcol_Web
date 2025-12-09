@@ -1,11 +1,10 @@
 {
-	"folders": [
-		{
-			"path": "../../../.."
-		},
-		{
-			"path": "C:/Users/usher/StudioProjects/Ashcol_ServiceHub"
-		}
-	],
-	"settings": {}
+    "folders": [
+        {
+            "path": "../../../.."
+        },
+        {
+            "path": "C:/Users/usher/StudioProjects/Ashcol_ServiceHub"
+        }
+    ]
 }

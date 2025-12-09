@@ -52,11 +52,7 @@ LoadModule rewrite_module modules/mod_rewrite.so
 
 ## Quick Test
 
-1. First, test if PHP is working:
-   Visit: `http://localhost/ashcol_portal/public/test.php`
-   You should see "PHP is working!"
-
-2. Test the home page:
+1. Test the home page:
    Visit: `http://localhost/ashcol_portal/public/`
    You should see the Laravel welcome page
 

@@ -52,8 +52,8 @@ php artisan migrate:fresh --seed
 
 After setting up, test the connection:
 
-1. Visit: `http://localhost/ashcol_portal/public/test_database.php`
-2. Or run: `php artisan migrate:status`
+1. Run: `php artisan migrate:status` to check migration status
+2. Or test the connection by accessing the application: `http://localhost/ashcol_portal/public/`
 
 ## Troubleshooting
 
