@@ -107,7 +107,7 @@ POST /api/v1/login
     "email": "john@example.com",
     "password": "SecurePassword123"
 }
-```
+
 
 #### Login Response (200 OK):
 ```json
