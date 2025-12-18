@@ -1,13 +1,7 @@
 {
-	"folders": [
-		{
-			"path": "."
-		},
-		{
-			"path": "../../../Users/usher/StudioProjects/Ashcol_ServiceHub"
-		}
-	],
-	"settings": {
-		"java.configuration.updateBuildConfiguration": "interactive"
-	}
+    "folders": [
+        {
+            "path": "."
+        }
+    ]
 }
