@@ -7,5 +7,7 @@
 			"path": "../../../Users/usher/StudioProjects/Ashcol_ServiceHub"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"java.configuration.updateBuildConfiguration": "interactive"
+	}
 }
