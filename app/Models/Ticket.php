@@ -18,6 +18,10 @@ class Ticket extends Model
         'assigned_staff_id',
         'status_id',
         'priority',
+        'address',
+        'contact',
+        'service_type',
+        'image_path',
     ];
 
     protected $casts = [

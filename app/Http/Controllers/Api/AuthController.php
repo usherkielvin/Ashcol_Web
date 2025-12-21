@@ -85,16 +85,13 @@ class AuthController extends Controller
                 'success' => true,
                 'message' => 'Login successful',
                 'data' => [
+                    'token' => $token,
                     'user' => [
                         'id' => $user->id,
-                        'username' => $user->username,
-                        'firstName' => $user->firstName,
-                        'lastName' => $user->lastName,
                         'name' => $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? '')),
                         'email' => $user->email,
                         'role' => $user->role,
                     ],
-                    'token' => $token,
                 ],
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -134,7 +131,7 @@ class AuthController extends Controller
             
             // Log incoming request data for debugging (excluding passwords)
             \Log::info('Registration request received', [
-                'data' => array_intersect_key($input, array_flip(['username', 'firstName', 'lastName', 'email'])),
+                'data' => array_intersect_key($input, array_flip(['username', 'firstName', 'lastName', 'email', 'role'])),
                 'has_password' => isset($input['password']),
                 'has_password_confirmation' => isset($input['password_confirmation']),
             ]);
@@ -146,6 +143,7 @@ class AuthController extends Controller
                 'email' => 'required|string|email|max:255|unique:users',
                 'password' => 'required|string|min:8|confirmed',
                 'password_confirmation' => 'required|string|min:8',
+                'role' => 'required|string|in:customer',
             ], [
                 'email.unique' => 'Email already used',
                 'email.required' => 'Email is required',
@@ -159,12 +157,14 @@ class AuthController extends Controller
                 'password.confirmed' => 'Passwords do not match',
                 'password_confirmation.required' => 'Password confirmation is required',
                 'password_confirmation.min' => 'Password confirmation must be at least 8 characters',
+                'role.required' => 'Role is required',
+                'role.in' => 'Invalid role specified',
             ]);
 
             if ($validator->fails()) {
                 \Log::warning('Registration validation failed', [
                     'errors' => $validator->errors()->toArray(),
-                    'request_data' => array_intersect_key($input, array_flip(['username', 'firstName', 'lastName', 'email'])),
+                    'request_data' => array_intersect_key($input, array_flip(['username', 'firstName', 'lastName', 'email', 'role'])),
                 ]);
                 
                 return response()->json([
@@ -195,7 +195,7 @@ class AuthController extends Controller
                 'name' => trim($input['firstName'] . ' ' . $input['lastName']),
                 'email' => $input['email'],
                 'password' => Hash::make($input['password']),
-                'role' => 'customer',
+                'role' => $input['role'],
             ]);
 
             // Send verification email
@@ -235,7 +235,7 @@ class AuthController extends Controller
             // Log database errors with full details
             \Log::error('Registration database error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
-                'request_data' => array_intersect_key($input ?? $request->all(), array_flip(['username', 'firstName', 'lastName', 'email']))
+                'request_data' => array_intersect_key($input ?? $request->all(), array_flip(['username', 'firstName', 'lastName', 'email', 'role']))
             ]);
             
             return response()->json([
@@ -249,7 +249,7 @@ class AuthController extends Controller
                 'trace' => $e->getTraceAsString(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
-                'request_data' => array_intersect_key($input ?? $request->all(), array_flip(['username', 'firstName', 'lastName', 'email']))
+                'request_data' => array_intersect_key($input ?? $request->all(), array_flip(['username', 'firstName', 'lastName', 'email', 'role']))
             ]);
             
             return response()->json([

@@ -18,6 +18,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/user', [ProfileController::class, 'user']);
         Route::get('/profile', [ProfileController::class, 'show']);
+        Route::post('/tickets', [TicketController::class, 'store']);
     });
 });
 

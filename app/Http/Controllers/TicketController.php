@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\StoreTicketRequest;
 use App\Http\Requests\UpdateTicketRequest;
 use App\Models\Ticket;
 use App\Models\TicketStatus;
@@ -87,28 +86,88 @@ class TicketController extends Controller
     /**
      * Store a newly created ticket in storage.
      */
-    public function store(StoreTicketRequest $request): RedirectResponse
+    public function store(Request $request)
     {
         $this->authorize('create', Ticket::class);
         $user = $request->user();
-        
-        $data = $request->validated();
-        
-        // Customers can only create tickets for themselves
-        if ($user->isCustomer()) {
+
+        // Check if it's an API request (multipart/form-data)
+        $isApi = $request->is('api/*') || $request->expectsJson();
+
+        if ($isApi) {
+            // API validation for service tickets
+            $validated = $request->validate([
+                'description' => 'required|string|max:5000',
+                'address' => 'required|string|max:255',
+                'contact' => 'required|string|max:255',
+                'service_type' => 'required|string|max:255',
+                'image' => 'nullable|image|mimes:jpg,png,jpeg,gif|max:2048', // 2MB max
+            ]);
+
+            $data = $validated;
             $data['customer_id'] = $user->id;
             $data['status_id'] = TicketStatus::getDefault()->id;
-        }
-        
-        // If no staff assigned, set to null
-        if (empty($data['assigned_staff_id'])) {
-            $data['assigned_staff_id'] = null;
-        }
+            $data['priority'] = Ticket::PRIORITY_MEDIUM; // Default priority
+            $data['title'] = 'Service Request'; // Default title
 
-        $ticket = Ticket::create($data);
+            // Handle image upload
+            if ($request->hasFile('image')) {
+                $ticketsDir = public_path('tickets');
+                if (!file_exists($ticketsDir)) {
+                    mkdir($ticketsDir, 0755, true);
+                }
+                $image = $request->file('image');
+                $imageName = time() . '_' . $image->getClientOriginalName();
+                $image->move($ticketsDir, $imageName);
+                $data['image_path'] = 'tickets/' . $imageName;
+            }
 
-        return redirect()->route('tickets.show', $ticket)
-            ->with('success', 'Ticket created successfully.');
+            $ticket = Ticket::create($data);
+
+            return response()->json([
+                'message' => 'Ticket created successfully.',
+                'ticket' => $ticket->load(['customer', 'status']),
+            ], 201);
+        } else {
+            // Web form validation
+            $rules = [
+                'title' => ['required', 'string', 'max:255'],
+                'description' => ['required', 'string', 'max:5000'],
+                'priority' => ['required', \Illuminate\Validation\Rule::in([
+                    Ticket::PRIORITY_LOW,
+                    Ticket::PRIORITY_MEDIUM,
+                    Ticket::PRIORITY_HIGH,
+                    Ticket::PRIORITY_URGENT,
+                ])],
+            ];
+
+            // Admin and staff can assign customer and staff
+            if ($user->isAdminOrStaff()) {
+                $rules['customer_id'] = ['nullable', 'exists:users,id'];
+                $rules['assigned_staff_id'] = ['nullable', 'exists:users,id'];
+                $rules['status_id'] = ['nullable', 'exists:ticket_statuses,id'];
+            }
+
+            $validated = $request->validate($rules);
+
+            $data = $validated;
+
+            // Customers can only create tickets for themselves
+            if ($user->isCustomer()) {
+                $data['customer_id'] = $user->id;
+                $data['status_id'] = TicketStatus::getDefault()->id;
+            }
+
+            // If no staff assigned, set to null
+            if (empty($data['assigned_staff_id'])) {
+                $data['assigned_staff_id'] = null;
+            }
+
+            $ticket = Ticket::create($data);
+
+            return redirect()->route('tickets.show', $ticket)
+                ->with('success', 'Ticket created successfully.');
+        }
     }
 
     /**
