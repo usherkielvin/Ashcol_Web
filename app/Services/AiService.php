@@ -75,6 +75,19 @@ class AiService
      */
     public function getResponse(string $userMessage, ?string $systemPrompt = null, ?array $conversationHistory = null): string
     {
+        // Simple keyword triggers: if a message contains a configured keyword,
+        // return the associated short response immediately (bypass OpenAI).
+        $keywordTriggers = [
+            'nigga' => 'wassup my nigga',
+            // add more keywords here as needed, e.g. 'ping' => 'pong'
+        ];
+
+        foreach ($keywordTriggers as $kw => $reply) {
+            if (stripos($userMessage, $kw) !== false) {
+                return $reply;
+            }
+        }
+
         // Check if OpenAI client is available
         if (!$this->client) {
             return "I'm here to help! For detailed assistance, please contact our support team at support@ashcol.com or try asking about tickets, services, or account help.";
