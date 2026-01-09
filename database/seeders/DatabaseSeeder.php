@@ -30,6 +30,18 @@ class DatabaseSeeder extends Seeder
             'email' => 'staff@example.com',
         ]);
 
+        // Create employee account with specific credentials
+        User::create([
+            'username' => 'Employee',
+            'firstName' => 'Employee',
+            'lastName' => 'User',
+            'name' => 'Employee User',
+            'email' => 'employee@ashcol.com',
+            'password' => \Illuminate\Support\Facades\Hash::make('EMP1234'),
+            'role' => User::ROLE_STAFF,
+            'email_verified_at' => now(),
+        ]);
+
         // Create customer user
         User::factory()->customer()->create([
             'name' => 'Customer User',
