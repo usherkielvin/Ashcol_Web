@@ -18,6 +18,7 @@ class User extends Authenticatable
      * User roles
      */
     const ROLE_ADMIN = 'admin';
+    const ROLE_MANAGER = 'manager';
     const ROLE_STAFF = 'staff';
     const ROLE_CUSTOMER = 'customer';
 
@@ -81,6 +82,14 @@ class User extends Authenticatable
     public function isCustomer(): bool
     {
         return $this->role === self::ROLE_CUSTOMER;
+    }
+
+    /**
+     * Check if user is manager
+     */
+    public function isManager(): bool
+    {
+        return $this->role === self::ROLE_MANAGER;
     }
 
     /**
