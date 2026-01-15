@@ -16,6 +16,7 @@ Route::prefix('v1')->group(function () {
     // Protected routes
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
+        Route::post('/change-password', [AuthController::class, 'changePassword']);
         Route::get('/user', [ProfileController::class, 'user']);
         Route::get('/profile', [ProfileController::class, 'show']);
         Route::post('/tickets', [TicketController::class, 'store']);
