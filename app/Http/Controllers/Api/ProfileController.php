@@ -86,6 +86,9 @@ class ProfileController extends Controller
             }
         }
 
+        // Check if user has Facebook account linked
+        $hasFacebookAccount = $user->facebookAccount !== null;
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -97,6 +100,7 @@ class ProfileController extends Controller
                 'email' => $email,
                 'role' => $user->role ?? 'customer',
                 'profile_photo' => $profilePhotoUrl,
+                'has_facebook_account' => $hasFacebookAccount,
             ],
         ]);
     }

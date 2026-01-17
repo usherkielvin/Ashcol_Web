@@ -35,6 +35,9 @@ class AuthController extends Controller
             }
         }
 
+        // Check if user has Facebook account linked
+        $hasFacebookAccount = $user->facebookAccount !== null;
+
         return [
             'id' => $user->id,
             'username' => $user->username ?? null,
@@ -44,6 +47,7 @@ class AuthController extends Controller
             'email' => $user->email ?? null,
             'role' => $user->role ?? 'customer',
             'profile_photo' => $profilePhotoUrl,
+            'has_facebook_account' => $hasFacebookAccount,
         ];
     }
 
