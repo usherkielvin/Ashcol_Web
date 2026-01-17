@@ -10,6 +10,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/google-signin', [AuthController::class, 'googleSignIn']);
+    Route::post('/facebook-signin', [AuthController::class, 'facebookSignIn']);
     Route::post('/send-verification-code', [AuthController::class, 'sendVerificationCode']);
     Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
     Route::post('/chatbot', [ChatbotController::class, 'handle']);

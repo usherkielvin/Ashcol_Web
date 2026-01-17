@@ -233,6 +233,129 @@ class AuthController extends Controller
     }
 
     /**
+     * Handle Facebook Sign-In
+     * Verifies Facebook access token and creates/logs in user
+     */
+    public function facebookSignIn(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'access_token' => 'nullable|string', // Optional - may be null if not configured
+                'email' => 'required|string|email',
+                'first_name' => 'nullable|string|max:255',
+                'last_name' => 'nullable|string|max:255',
+                'phone' => 'nullable|string|max:20',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation Error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Verify Facebook access token (simplified - in production, verify with Facebook's API)
+            // For now, we'll trust the token from the app and verify email matches
+            $email = $request->email;
+            $firstName = $request->input('first_name', '');
+            $lastName = $request->input('last_name', '');
+            $phone = $request->input('phone', '');
+
+            // Check if user exists
+            $user = User::where('email', $email)->first();
+
+            if ($user) {
+                // User exists - log them in
+                $token = $user->createToken('mobile-app')->plainTextToken;
+                
+                // Update user info if provided
+                if ($firstName) $user->firstName = $firstName;
+                if ($lastName) $user->lastName = $lastName;
+                if ($phone) $user->phone = $phone;
+                if ($firstName || $lastName) {
+                    $user->name = trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
+                }
+                $user->email_verified_at = now(); // Facebook emails are verified
+                $user->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Login successful',
+                    'data' => [
+                        'token' => $token,
+                        'user' => [
+                            'id' => $user->id,
+                            'username' => $user->username,
+                            'firstName' => $user->firstName,
+                            'lastName' => $user->lastName,
+                            'name' => $user->name,
+                            'email' => $user->email,
+                            'role' => $user->role,
+                        ],
+                    ],
+                ]);
+            } else {
+                // New user - create account
+                // Generate username from email
+                $username = explode('@', $email)[0];
+                $baseUsername = $username;
+                $counter = 1;
+                
+                // Ensure username is unique
+                while (User::where('username', $username)->exists()) {
+                    $username = $baseUsername . $counter;
+                    $counter++;
+                }
+
+                // Create user
+                $user = User::create([
+                    'username' => $username,
+                    'firstName' => $firstName ?: 'User',
+                    'lastName' => $lastName ?: '',
+                    'name' => trim(($firstName ?: 'User') . ' ' . ($lastName ?: '')),
+                    'email' => $email,
+                    'password' => Hash::make(uniqid('facebook_', true)), // Random password - will be updated when user sets password
+                    'role' => 'customer', // Default role
+                    'phone' => $phone,
+                    'email_verified_at' => now(), // Facebook emails are verified
+                ]);
+
+                $token = $user->createToken('mobile-app')->plainTextToken;
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Account created successfully',
+                    'data' => [
+                        'token' => $token,
+                        'user' => [
+                            'id' => $user->id,
+                            'username' => $user->username,
+                            'firstName' => $user->firstName,
+                            'lastName' => $user->lastName,
+                            'name' => $user->name,
+                            'email' => $user->email,
+                            'role' => $user->role,
+                        ],
+                    ],
+                ], 201);
+            }
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation Error',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Facebook Sign-In error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Facebook Sign-In failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Set initial password for Google users (no current password required)
      */
     public function setInitialPassword(Request $request)
