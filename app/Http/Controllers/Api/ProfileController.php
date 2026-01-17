@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 
 class ProfileController extends Controller
 {
@@ -72,6 +74,18 @@ class ProfileController extends Controller
             $email = null;
         }
 
+        // Get profile photo URL
+        $profilePhotoUrl = null;
+        if ($user->profile_photo) {
+            // If it's a full URL (starts with http), use as-is
+            if (strpos($user->profile_photo, 'http') === 0) {
+                $profilePhotoUrl = $user->profile_photo;
+            } else {
+                // Otherwise, construct the full URL
+                $profilePhotoUrl = asset('storage/' . $user->profile_photo);
+            }
+        }
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -82,6 +96,7 @@ class ProfileController extends Controller
                 'name' => $name,
                 'email' => $email,
                 'role' => $user->role ?? 'customer',
+                'profile_photo' => $profilePhotoUrl,
             ],
         ]);
     }
@@ -92,6 +107,106 @@ class ProfileController extends Controller
     public function show(Request $request)
     {
         return $this->user($request);
+    }
+
+    /**
+     * Upload profile photo
+     */
+    public function uploadPhoto(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'photo' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120', // Max 5MB
+            ], [
+                'photo.required' => 'Please select a photo to upload',
+                'photo.image' => 'File must be an image',
+                'photo.mimes' => 'Photo must be a JPEG, PNG, JPG, or GIF',
+                'photo.max' => 'Photo size must not exceed 5MB',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation Error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $user = $request->user();
+
+            // Delete old photo if exists
+            if ($user->profile_photo && Storage::disk('public')->exists($user->profile_photo)) {
+                Storage::disk('public')->delete($user->profile_photo);
+            }
+
+            // Store new photo
+            $photo = $request->file('photo');
+            $filename = 'profile_' . $user->id . '_' . time() . '.' . $photo->getClientOriginalExtension();
+            $path = $photo->storeAs('profile_photos', $filename, 'public');
+
+            // Update user profile_photo field
+            $user->profile_photo = $path;
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile photo uploaded successfully',
+                'data' => [
+                    'profile_photo' => asset('storage/' . $path),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Profile photo upload error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload profile photo: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Update profile photo (alias for uploadPhoto)
+     */
+    public function updatePhoto(Request $request)
+    {
+        return $this->uploadPhoto($request);
+    }
+
+    /**
+     * Delete profile photo
+     */
+    public function deletePhoto(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user->profile_photo) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No profile photo to delete',
+                ], 404);
+            }
+
+            // Delete photo file if exists
+            if (Storage::disk('public')->exists($user->profile_photo)) {
+                Storage::disk('public')->delete($user->profile_photo);
+            }
+
+            // Update user profile_photo field
+            $user->profile_photo = null;
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile photo deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Profile photo delete error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete profile photo: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }
 

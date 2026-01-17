@@ -9,14 +9,44 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 use App\Models\User;
 use App\Models\EmailVerification;
+use App\Models\FacebookAccount;
 use App\Mail\VerificationCode;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\QueryException;
 
 class AuthController extends Controller
 {
+    /**
+     * Format user data for API responses
+     */
+    private function formatUserData($user)
+    {
+        $profilePhotoUrl = null;
+        if ($user->profile_photo) {
+            // If it's a full URL (starts with http), use as-is
+            if (strpos($user->profile_photo, 'http') === 0) {
+                $profilePhotoUrl = $user->profile_photo;
+            } else {
+                // Otherwise, construct the full URL
+                $profilePhotoUrl = asset('storage/' . $user->profile_photo);
+            }
+        }
+
+        return [
+            'id' => $user->id,
+            'username' => $user->username ?? null,
+            'firstName' => $user->firstName ?? null,
+            'lastName' => $user->lastName ?? null,
+            'name' => $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? '')),
+            'email' => $user->email ?? null,
+            'role' => $user->role ?? 'customer',
+            'profile_photo' => $profilePhotoUrl,
+        ];
+    }
+
     /**
      * Handle login request
      * Supports both email and username login
@@ -86,12 +116,7 @@ class AuthController extends Controller
                 'message' => 'Login successful',
                 'data' => [
                     'token' => $token,
-                    'user' => [
-                        'id' => $user->id,
-                        'name' => $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? '')),
-                        'email' => $user->email,
-                        'role' => $user->role,
-                    ],
+                    'user' => $this->formatUserData($user),
                 ],
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -161,15 +186,7 @@ class AuthController extends Controller
                     'message' => 'Login successful',
                     'data' => [
                         'token' => $token,
-                        'user' => [
-                            'id' => $user->id,
-                            'username' => $user->username,
-                            'firstName' => $user->firstName,
-                            'lastName' => $user->lastName,
-                            'name' => $user->name,
-                            'email' => $user->email,
-                            'role' => $user->role,
-                        ],
+                        'user' => $this->formatUserData($user),
                     ],
                 ]);
             } else {
@@ -205,15 +222,7 @@ class AuthController extends Controller
                     'message' => 'Account created successfully',
                     'data' => [
                         'token' => $token,
-                        'user' => [
-                            'id' => $user->id,
-                            'username' => $user->username,
-                            'firstName' => $user->firstName,
-                            'lastName' => $user->lastName,
-                            'name' => $user->name,
-                            'email' => $user->email,
-                            'role' => $user->role,
-                        ],
+                        'user' => $this->formatUserData($user),
                     ],
                 ], 201);
             }
@@ -241,7 +250,8 @@ class AuthController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'access_token' => 'nullable|string', // Optional - may be null if not configured
-                'email' => 'required|string|email',
+                'facebook_id' => 'required|string', // Facebook ID is required for pure FB authentication
+                'email' => 'nullable|string|email', // Email is now optional
                 'first_name' => 'nullable|string|max:255',
                 'last_name' => 'nullable|string|max:255',
                 'phone' => 'nullable|string|max:20',
@@ -256,27 +266,75 @@ class AuthController extends Controller
             }
 
             // Verify Facebook access token (simplified - in production, verify with Facebook's API)
-            // For now, we'll trust the token from the app and verify email matches
-            $email = $request->email;
+            // For now, we'll trust the token from the app
+            $facebookId = $request->facebook_id;
+            $email = $request->input('email');
+            // Convert empty string to null for email (to allow multiple NULL emails with unique constraint)
+            if ($email === '' || $email === null) {
+                $email = null;
+            }
             $firstName = $request->input('first_name', '');
             $lastName = $request->input('last_name', '');
             $phone = $request->input('phone', '');
 
-            // Check if user exists
-            $user = User::where('email', $email)->first();
+            // Check if user exists by Facebook ID (in facebook_accounts table) first, then by email if provided
+            $user = null;
+            $facebookAccount = null;
+            
+            if ($facebookId) {
+                $facebookAccount = FacebookAccount::where('facebook_id', $facebookId)->first();
+                if ($facebookAccount) {
+                    $user = $facebookAccount->user;
+                }
+            }
+            
+            // If not found by Facebook ID and email is provided, check by email
+            if (!$user && $email) {
+                $user = User::where('email', $email)->first();
+                // If user exists but no Facebook account, create the link
+                if ($user && $facebookId) {
+                    $facebookAccount = FacebookAccount::create([
+                        'user_id' => $user->id,
+                        'facebook_id' => $facebookId,
+                        'access_token' => $request->input('access_token'),
+                        'linked_at' => now(),
+                    ]);
+                }
+            }
 
             if ($user) {
                 // User exists - log them in
                 $token = $user->createToken('mobile-app')->plainTextToken;
                 
+                // Update or create Facebook account link if not exists
+                if ($facebookId && !$facebookAccount) {
+                    $facebookAccount = FacebookAccount::updateOrCreate(
+                        ['user_id' => $user->id],
+                        [
+                            'facebook_id' => $facebookId,
+                            'access_token' => $request->input('access_token'),
+                            'linked_at' => now(),
+                        ]
+                    );
+                } elseif ($facebookAccount && $request->input('access_token')) {
+                    // Update access token if provided
+                    $facebookAccount->access_token = $request->input('access_token');
+                    $facebookAccount->save();
+                }
+                
                 // Update user info if provided
                 if ($firstName) $user->firstName = $firstName;
                 if ($lastName) $user->lastName = $lastName;
                 if ($phone) $user->phone = $phone;
+                if ($email && !$user->email) {
+                    $user->email = $email; // Update email if not set
+                }
                 if ($firstName || $lastName) {
                     $user->name = trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
                 }
-                $user->email_verified_at = now(); // Facebook emails are verified
+                if ($email) {
+                    $user->email_verified_at = now(); // Facebook emails are verified
+                }
                 $user->save();
 
                 return response()->json([
@@ -284,21 +342,17 @@ class AuthController extends Controller
                     'message' => 'Login successful',
                     'data' => [
                         'token' => $token,
-                        'user' => [
-                            'id' => $user->id,
-                            'username' => $user->username,
-                            'firstName' => $user->firstName,
-                            'lastName' => $user->lastName,
-                            'name' => $user->name,
-                            'email' => $user->email,
-                            'role' => $user->role,
-                        ],
+                        'user' => $this->formatUserData($user),
                     ],
                 ]);
             } else {
                 // New user - create account
-                // Generate username from email
-                $username = explode('@', $email)[0];
+                // Generate username from email if available, otherwise from Facebook ID
+                if ($email) {
+                    $username = explode('@', $email)[0];
+                } else {
+                    $username = 'fb_' . $facebookId;
+                }
                 $baseUsername = $username;
                 $counter = 1;
                 
@@ -308,18 +362,44 @@ class AuthController extends Controller
                     $counter++;
                 }
 
-                // Create user
-                $user = User::create([
-                    'username' => $username,
-                    'firstName' => $firstName ?: 'User',
-                    'lastName' => $lastName ?: '',
-                    'name' => trim(($firstName ?: 'User') . ' ' . ($lastName ?: '')),
-                    'email' => $email,
-                    'password' => Hash::make(uniqid('facebook_', true)), // Random password - will be updated when user sets password
-                    'role' => 'customer', // Default role
-                    'phone' => $phone,
-                    'email_verified_at' => now(), // Facebook emails are verified
-                ]);
+                // Use database transaction to ensure both user and FacebookAccount are created together
+                DB::beginTransaction();
+                try {
+                    // Create user (without facebook_id - stored in separate table)
+                    $user = User::create([
+                        'username' => $username,
+                        'firstName' => $firstName ?: 'User',
+                        'lastName' => $lastName ?: '',
+                        'name' => trim(($firstName ?: 'User') . ' ' . ($lastName ?: '')),
+                        'email' => $email, // Can be null for pure FB users
+                        'password' => Hash::make(uniqid('facebook_', true)), // Random password
+                        'role' => 'customer', // Default role
+                        'phone' => $phone,
+                        'email_verified_at' => $email ? now() : null, // Only verify if email exists
+                    ]);
+
+                    // Create Facebook account link
+                    FacebookAccount::create([
+                        'user_id' => $user->id,
+                        'facebook_id' => $facebookId,
+                        'access_token' => $request->input('access_token'),
+                        'linked_at' => now(),
+                    ]);
+
+                    // Commit transaction
+                    DB::commit();
+                } catch (\Exception $e) {
+                    // Rollback transaction on any error
+                    DB::rollBack();
+                    \Log::error('Error creating Facebook user/account: ' . $e->getMessage(), [
+                        'username' => $username,
+                        'email' => $email,
+                        'facebook_id' => $facebookId,
+                        'exception' => get_class($e),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    throw $e; // Re-throw to be caught by outer catch
+                }
 
                 $token = $user->createToken('mobile-app')->plainTextToken;
 
@@ -328,15 +408,7 @@ class AuthController extends Controller
                     'message' => 'Account created successfully',
                     'data' => [
                         'token' => $token,
-                        'user' => [
-                            'id' => $user->id,
-                            'username' => $user->username,
-                            'firstName' => $user->firstName,
-                            'lastName' => $user->lastName,
-                            'name' => $user->name,
-                            'email' => $user->email,
-                            'role' => $user->role,
-                        ],
+                        'user' => $this->formatUserData($user),
                     ],
                 ], 201);
             }
@@ -346,11 +418,36 @@ class AuthController extends Controller
                 'message' => 'Validation Error',
                 'errors' => $e->errors()
             ], 422);
-        } catch (\Exception $e) {
-            \Log::error('Facebook Sign-In error: ' . $e->getMessage());
+        } catch (\Illuminate\Database\QueryException $e) {
+            \Log::error('Facebook Sign-In database error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'request_data' => [
+                    'facebook_id' => $request->input('facebook_id'),
+                    'email' => $request->input('email'),
+                    'has_first_name' => $request->has('first_name'),
+                    'has_last_name' => $request->has('last_name'),
+                ]
+            ]);
             return response()->json([
                 'success' => false,
-                'message' => 'Facebook Sign-In failed: ' . $e->getMessage()
+                'message' => 'Server error. Please check your Laravel server logs and try again.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        } catch (\Exception $e) {
+            \Log::error('Facebook Sign-In error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'request_data' => [
+                    'facebook_id' => $request->input('facebook_id'),
+                    'email' => $request->input('email'),
+                ]
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Facebook Sign-In failed: ' . $e->getMessage(),
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
@@ -502,14 +599,7 @@ class AuthController extends Controller
                 'success' => true,
                 'message' => 'Registration successful. Please verify your email.',
                 'data' => [
-                    'user' => [
-                        'id' => $user->id,
-                        'username' => $user->username,
-                        'firstName' => $user->firstName,
-                        'lastName' => $user->lastName,
-                        'email' => $user->email,
-                        'role' => $user->role,
-                    ],
+                    'user' => $this->formatUserData($user),
                     'token' => $token,
                     'requires_verification' => true,
                 ]
@@ -640,15 +730,7 @@ class AuthController extends Controller
                 'success' => true,
                 'message' => 'Email verified successfully',
                 'data' => [
-                    'user' => [
-                        'id' => $user->id,
-                        'username' => $user->username,
-                        'firstName' => $user->firstName,
-                        'lastName' => $user->lastName,
-                        'name' => $user->name,
-                        'email' => $user->email,
-                        'role' => $user->role,
-                    ],
+                    'user' => $this->formatUserData($user),
                     'token' => $token,
                 ],
             ]);

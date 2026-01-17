@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ChatbotController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\TicketController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -22,6 +23,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/set-initial-password', [AuthController::class, 'setInitialPassword']);
         Route::get('/user', [ProfileController::class, 'user']);
         Route::get('/profile', [ProfileController::class, 'show']);
+        Route::post('/profile/photo', [ProfileController::class, 'uploadPhoto']);
+        Route::put('/profile/photo', [ProfileController::class, 'updatePhoto']);
+        Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto']);
         Route::post('/tickets', [TicketController::class, 'store']);
     });
 });

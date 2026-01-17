@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -36,6 +37,8 @@ class User extends Authenticatable
         'password',
         'role',
         'phone',
+        'profile_photo',
+        // facebook_id is now stored in facebook_accounts table, not here
     ];
 
     /**
@@ -123,5 +126,21 @@ class User extends Authenticatable
     public function ticketComments(): HasMany
     {
         return $this->hasMany(TicketComment::class);
+    }
+
+    /**
+     * Get the Facebook account linked to this user.
+     */
+    public function facebookAccount(): HasOne
+    {
+        return $this->hasOne(FacebookAccount::class);
+    }
+
+    /**
+     * Check if user has a Facebook account linked.
+     */
+    public function hasFacebookAccount(): bool
+    {
+        return $this->facebookAccount !== null;
     }
 }
