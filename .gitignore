@@ -21,3 +21,23 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Deployment configs (not needed for Railway auto-detection)
+Dockerfile
+docker-compose.yml
+render.yaml
+railway.json
+Procfile
+
+# IDE/Workspace files
+*.code-workspace
+.idea/
+.vscode/
+
+# Documentation (not needed for deployment)
+*.md
+!README.md
+docs/
+
+# SQL dumps (use migrations instead)
+*.sql
