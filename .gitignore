@@ -26,7 +26,6 @@ yarn-error.log
 Dockerfile
 docker-compose.yml
 render.yaml
-railway.json
 Procfile
 
 # IDE/Workspace files
