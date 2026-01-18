@@ -644,6 +644,7 @@ class AuthController extends Controller
 
     /**
      * Send verification code
+     * Supports both registration (user doesn't exist) and resend (user exists)
      */
     public function sendVerificationCode(Request $request)
     {
@@ -651,14 +652,9 @@ class AuthController extends Controller
             'email' => 'required|string|email',
         ]);
 
+        // Check if user exists (for resend scenario)
         $user = User::where('email', $request->email)->first();
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User not found',
-            ], 404);
-        }
-
+        
         // Generate verification code
         $verificationCode = EmailVerification::generateCode();
         
@@ -674,8 +670,16 @@ class AuthController extends Controller
 
         // Send verification email
         try {
-            // Use name if available, otherwise use firstName + lastName
-            $userName = $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
+            // Use name if user exists, otherwise use email or generic name
+            if ($user) {
+                // User exists - use their name
+                $userName = $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
+            } else {
+                // User doesn't exist (registration flow) - use email username or generic
+                $emailParts = explode('@', $request->email);
+                $userName = $emailParts[0] ?? 'User';
+            }
+            
             Mail::to($request->email)->send(new VerificationCode($verificationCode, $userName));
             
             return response()->json([
@@ -683,6 +687,11 @@ class AuthController extends Controller
                 'message' => 'Verification code sent to your email',
             ]);
         } catch (\Exception $e) {
+            \Log::error('Failed to send verification email: ' . $e->getMessage(), [
+                'email' => $request->email,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to send verification email: ' . $e->getMessage(),
@@ -722,9 +731,10 @@ class AuthController extends Controller
         // Mark as verified
         $verification->update(['verified' => true]);
 
-        // Update user email_verified_at
+        // Update user email_verified_at if user exists
         $user = User::where('email', $request->email)->first();
         if ($user) {
+            // User exists - update verification status and return user data
             $user->update(['email_verified_at' => now()]);
             
             // Create token for the verified user
@@ -740,10 +750,16 @@ class AuthController extends Controller
             ]);
         }
 
+        // User doesn't exist yet (registration flow) - OTP verified, ready for account creation
         return response()->json([
-            'success' => false,
-            'message' => 'User not found',
-        ], 404);
+            'success' => true,
+            'message' => 'Email verified successfully. You can now complete registration.',
+            'data' => [
+                'user' => null,
+                'token' => null,
+                'email_verified' => true,
+            ],
+        ]);
     }
 
     /**
