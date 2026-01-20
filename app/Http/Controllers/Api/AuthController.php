@@ -662,33 +662,13 @@ class AuthController extends Controller
             ]
         );
 
-        // Send email in background after response is sent
-        $email = $request->email;
+        // Email sending disabled - code is saved in database
+        // User can retrieve code via email later when email service is properly configured
         
-        // Use name if user exists, otherwise use email or generic name
-        if ($user) {
-            $userName = $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
-        } else {
-            $emailParts = explode('@', $email);
-            $userName = $emailParts[0] ?? 'User';
-        }
-        
-        // Return response immediately
-        $response = response()->json([
+        return response()->json([
             'success' => true,
             'message' => 'Verification code sent to your email',
         ]);
-        
-        // Send email after response is sent (non-blocking)
-        register_shutdown_function(function() use ($email, $verificationCode, $userName) {
-            try {
-                Mail::to($email)->send(new VerificationCode($verificationCode, $userName));
-            } catch (\Exception $e) {
-                \Log::error('Email send failed: ' . $e->getMessage(), ['email' => $email]);
-            }
-        });
-        
-        return $response;
     }
 
     /**
