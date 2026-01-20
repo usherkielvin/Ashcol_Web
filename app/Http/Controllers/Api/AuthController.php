@@ -588,14 +588,16 @@ class AuthController extends Controller
                 'role' => $input['role'],
             ]);
 
-            // Send verification email
-            try {
-                $userName = trim($input['firstName'] . ' ' . $input['lastName']);
-                Mail::to($input['email'])->send(new VerificationCode($verificationCode, $userName));
-            } catch (\Exception $e) {
-                // Log error but continue (for development, email might not be configured)
-                \Log::error('Failed to send verification email: ' . $e->getMessage());
-            }
+            // Send verification email asynchronously (non-blocking)
+            $email = $input['email'];
+            $userName = trim($input['firstName'] . ' ' . $input['lastName']);
+            dispatch(function() use ($email, $verificationCode, $userName) {
+                try {
+                    Mail::to($email)->send(new VerificationCode($verificationCode, $userName));
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send verification email: ' . $e->getMessage());
+                }
+            })->afterResponse();
 
             $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -668,35 +670,35 @@ class AuthController extends Controller
             ]
         );
 
-        // Send verification email
-        try {
-            // Use name if user exists, otherwise use email or generic name
-            if ($user) {
-                // User exists - use their name
-                $userName = $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
-            } else {
-                // User doesn't exist (registration flow) - use email username or generic
-                $emailParts = explode('@', $request->email);
-                $userName = $emailParts[0] ?? 'User';
-            }
-            
-            Mail::to($request->email)->send(new VerificationCode($verificationCode, $userName));
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'Verification code sent to your email',
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Failed to send verification email: ' . $e->getMessage(), [
-                'email' => $request->email,
-                'trace' => $e->getTraceAsString(),
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to send verification email: ' . $e->getMessage(),
-            ], 500);
+        // Send verification email asynchronously (non-blocking)
+        $email = $request->email;
+        
+        // Use name if user exists, otherwise use email or generic name
+        if ($user) {
+            // User exists - use their name
+            $userName = $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
+        } else {
+            // User doesn't exist (registration flow) - use email username or generic
+            $emailParts = explode('@', $email);
+            $userName = $emailParts[0] ?? 'User';
         }
+        
+        // Send email in background using dispatch
+        dispatch(function() use ($email, $verificationCode, $userName) {
+            try {
+                Mail::to($email)->send(new VerificationCode($verificationCode, $userName));
+            } catch (\Exception $e) {
+                \Log::error('Failed to send verification email: ' . $e->getMessage(), [
+                    'email' => $email,
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
+        })->afterResponse();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Verification code sent to your email',
+        ]);
     }
 
     /**
