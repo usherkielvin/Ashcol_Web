@@ -662,14 +662,33 @@ class AuthController extends Controller
             ]
         );
 
-        // TEMPORARILY DISABLED EMAIL - Return code directly for testing
-        // TODO: Re-enable email after confirming API works
+        // Send email in background after response is sent
+        $email = $request->email;
         
-        return response()->json([
+        // Use name if user exists, otherwise use email or generic name
+        if ($user) {
+            $userName = $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
+        } else {
+            $emailParts = explode('@', $email);
+            $userName = $emailParts[0] ?? 'User';
+        }
+        
+        // Return response immediately
+        $response = response()->json([
             'success' => true,
             'message' => 'Verification code sent to your email',
-            'code' => $verificationCode, // TEMP: Remove this after email works
         ]);
+        
+        // Send email after response is sent (non-blocking)
+        register_shutdown_function(function() use ($email, $verificationCode, $userName) {
+            try {
+                Mail::to($email)->send(new VerificationCode($verificationCode, $userName));
+            } catch (\Exception $e) {
+                \Log::error('Email send failed: ' . $e->getMessage(), ['email' => $email]);
+            }
+        });
+        
+        return $response;
     }
 
     /**
