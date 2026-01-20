@@ -588,16 +588,8 @@ class AuthController extends Controller
                 'role' => $input['role'],
             ]);
 
-            // Send verification email asynchronously (non-blocking)
-            $email = $input['email'];
-            $userName = trim($input['firstName'] . ' ' . $input['lastName']);
-            dispatch(function() use ($email, $verificationCode, $userName) {
-                try {
-                    Mail::to($email)->send(new VerificationCode($verificationCode, $userName));
-                } catch (\Exception $e) {
-                    \Log::error('Failed to send verification email: ' . $e->getMessage());
-                }
-            })->afterResponse();
+            // TEMPORARILY DISABLED EMAIL - TODO: Re-enable after confirming API works
+            // Email will be sent when user requests verification code separately
 
             $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -670,34 +662,13 @@ class AuthController extends Controller
             ]
         );
 
-        // Send verification email asynchronously (non-blocking)
-        $email = $request->email;
-        
-        // Use name if user exists, otherwise use email or generic name
-        if ($user) {
-            // User exists - use their name
-            $userName = $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
-        } else {
-            // User doesn't exist (registration flow) - use email username or generic
-            $emailParts = explode('@', $email);
-            $userName = $emailParts[0] ?? 'User';
-        }
-        
-        // Send email in background using dispatch
-        dispatch(function() use ($email, $verificationCode, $userName) {
-            try {
-                Mail::to($email)->send(new VerificationCode($verificationCode, $userName));
-            } catch (\Exception $e) {
-                \Log::error('Failed to send verification email: ' . $e->getMessage(), [
-                    'email' => $email,
-                    'trace' => $e->getTraceAsString(),
-                ]);
-            }
-        })->afterResponse();
+        // TEMPORARILY DISABLED EMAIL - Return code directly for testing
+        // TODO: Re-enable email after confirming API works
         
         return response()->json([
             'success' => true,
             'message' => 'Verification code sent to your email',
+            'code' => $verificationCode, // TEMP: Remove this after email works
         ]);
     }
 
