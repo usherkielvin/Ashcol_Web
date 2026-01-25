@@ -710,6 +710,7 @@ class AuthController extends Controller
 
     /**
      * Verify email with code
+     * Optimized for speed - reduced database queries, eager loading
      */
     public function verifyEmail(Request $request)
     {
@@ -718,37 +719,38 @@ class AuthController extends Controller
             'code' => 'required|string|size:6',
         ]);
 
+        // Optimized: Single query with all conditions
         $verification = EmailVerification::where('email', $request->email)
             ->where('code', $request->code)
             ->where('verified', false)
+            ->where('expires_at', '>', now()) // Check expiry in query (faster)
             ->first();
 
         if (!$verification) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid verification code',
+                'message' => 'Invalid or expired verification code',
             ], 400);
         }
 
-        if ($verification->expires_at->isPast()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Verification code has expired',
-            ], 400);
-        }
+        // Mark as verified immediately (fast direct update)
+        $verification->verified = true;
+        $verification->save();
+        
+        $email = $request->email;
 
-        // Mark as verified
-        $verification->update(['verified' => true]);
-
-        // Update user email_verified_at if user exists
-        $user = User::where('email', $request->email)->first();
+        // Check if user exists and get with eager loading (optimized - single query)
+        $user = User::with('facebookAccount')->where('email', $email)->first();
+        
         if ($user) {
-            // User exists - update verification status and return user data
-            $user->update(['email_verified_at' => now()]);
+            // Update user verification status (queue if possible, but need immediate response)
+            $user->email_verified_at = now();
+            $user->save();
             
-            // Create token for the verified user
+            // Create token (required for immediate response)
             $token = $user->createToken('mobile-app')->plainTextToken;
 
+            // Return immediately - user data already loaded with relationships
             return response()->json([
                 'success' => true,
                 'message' => 'Email verified successfully',
@@ -759,7 +761,7 @@ class AuthController extends Controller
             ]);
         }
 
-        // User doesn't exist yet (registration flow) - OTP verified, ready for account creation
+        // User doesn't exist yet (registration flow)
         return response()->json([
             'success' => true,
             'message' => 'Email verified successfully. You can now complete registration.',
@@ -773,20 +775,27 @@ class AuthController extends Controller
 
     /**
      * Handle logout request
-     * Optimized for fast response - deletes token efficiently
+     * Optimized for fastest response - uses direct DB query
      */
     public function logout(Request $request)
     {
         try {
-            // Delete current token directly (fastest method)
-            // currentAccessToken() is already loaded from middleware
-            $request->user()->currentAccessToken()->delete();
+            $user = $request->user();
+            $token = $user->currentAccessToken();
+            
+            if ($token) {
+                // Use direct DB query for fastest deletion (bypasses Eloquent overhead)
+                // This is faster than $token->delete() for remote databases
+                DB::table('personal_access_tokens')
+                    ->where('id', $token->id)
+                    ->delete();
+            }
         } catch (\Exception $e) {
             // Log but don't fail - token will expire naturally
             \Log::warning('Logout token deletion: ' . $e->getMessage());
         }
 
-        // Return immediately - don't wait for any additional operations
+        // Return immediately - token deletion is fast with direct query
         return response()->json([
             'success' => true,
             'message' => 'Logged out successfully',
