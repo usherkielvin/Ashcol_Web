@@ -588,8 +588,26 @@ class AuthController extends Controller
                 'role' => $input['role'],
             ]);
 
-            // TEMPORARILY DISABLED EMAIL - TODO: Re-enable after confirming API works
-            // Email will be sent when user requests verification code separately
+            // Send verification code email asynchronously (non-blocking)
+            // Registration continues immediately, email sent in background
+            try {
+                $userName = trim($input['firstName'] . ' ' . $input['lastName']);
+                Mail::to($input['email'])->queue(new VerificationCode($verificationCode, $userName));
+                \Log::info('Registration verification code email queued', ['email' => $input['email']]);
+            } catch (\Exception $e) {
+                // Try synchronous send as fallback
+                try {
+                    $userName = trim($input['firstName'] . ' ' . $input['lastName']);
+                    Mail::to($input['email'])->send(new VerificationCode($verificationCode, $userName));
+                    \Log::info('Registration verification code email sent (sync fallback)', ['email' => $input['email']]);
+                } catch (\Exception $e2) {
+                    \Log::error('Failed to send registration verification code email: ' . $e2->getMessage(), [
+                        'email' => $input['email'],
+                        'error' => $e2->getMessage()
+                    ]);
+                    // Continue with registration even if email fails - user can request resend
+                }
+            }
 
             $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -662,9 +680,28 @@ class AuthController extends Controller
             ]
         );
 
-        // Email sending disabled - code is saved in database
-        // User can retrieve code via email later when email service is properly configured
+        // Send verification code email asynchronously (non-blocking)
+        // Return success immediately, email will be sent in background
+        try {
+            $userName = $user ? ($user->firstName ?? $user->name ?? 'User') : null;
+            // Dispatch to queue for faster response (even with sync queue, it's cleaner)
+            Mail::to($request->email)->queue(new VerificationCode($verificationCode, $userName));
+            \Log::info('Verification code email queued', ['email' => $request->email]);
+        } catch (\Exception $e) {
+            // Try synchronous send as fallback
+            try {
+                $userName = $user ? ($user->firstName ?? $user->name ?? 'User') : null;
+                Mail::to($request->email)->send(new VerificationCode($verificationCode, $userName));
+                \Log::info('Verification code email sent (sync fallback)', ['email' => $request->email]);
+            } catch (\Exception $e2) {
+                \Log::error('Failed to send verification code email: ' . $e2->getMessage(), [
+                    'email' => $request->email,
+                    'error' => $e2->getMessage()
+                ]);
+            }
+        }
         
+        // Return immediately - code is saved, email is being sent
         return response()->json([
             'success' => true,
             'message' => 'Verification code sent to your email',
@@ -804,6 +841,179 @@ class AuthController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to change password: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle password reset request (forgot password)
+     * Sends verification code to email
+     */
+    public function requestPasswordReset(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|string|email',
+            ], [
+                'email.required' => 'Email is required',
+                'email.email' => 'Please enter a valid email address',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation Error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Check if user exists
+            $user = User::where('email', $request->email)->first();
+            
+            if (!$user) {
+                // Don't reveal if email exists or not for security
+                return response()->json([
+                    'success' => true,
+                    'message' => 'If the email exists, a verification code has been sent.',
+                ]);
+            }
+
+            // Generate verification code
+            $verificationCode = EmailVerification::generateCode();
+            
+            // Store verification code (expires in 10 minutes)
+            EmailVerification::updateOrCreate(
+                ['email' => $request->email],
+                [
+                    'code' => $verificationCode,
+                    'expires_at' => now()->addMinutes(10),
+                    'verified' => false,
+                ]
+            );
+
+            // Send verification code email asynchronously (non-blocking)
+            try {
+                $userName = $user->firstName ?? $user->name ?? 'User';
+                Mail::to($request->email)->queue(new VerificationCode($verificationCode, $userName));
+                \Log::info('Password reset verification code email queued', ['email' => $request->email]);
+            } catch (\Exception $e) {
+                // Try synchronous send as fallback
+                try {
+                    $userName = $user->firstName ?? $user->name ?? 'User';
+                    Mail::to($request->email)->send(new VerificationCode($verificationCode, $userName));
+                    \Log::info('Password reset verification code email sent (sync fallback)', ['email' => $request->email]);
+                } catch (\Exception $e2) {
+                    \Log::error('Failed to send password reset verification code email: ' . $e2->getMessage(), [
+                        'email' => $request->email,
+                        'error' => $e2->getMessage()
+                    ]);
+                    // Still return success - code is saved, user can request resend
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Verification code sent to your email',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Request password reset error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to process request: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle password reset with verification code
+     */
+    public function resetPassword(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|string|email',
+                'code' => 'required|string|size:6',
+                'password' => 'required|string|min:8|confirmed',
+                'password_confirmation' => 'required|string|min:8',
+            ], [
+                'email.required' => 'Email is required',
+                'email.email' => 'Please enter a valid email address',
+                'code.required' => 'Verification code is required',
+                'code.size' => 'Verification code must be 6 digits',
+                'password.required' => 'Password is required',
+                'password.min' => 'Password must be at least 8 characters',
+                'password.confirmed' => 'Passwords do not match',
+                'password_confirmation.required' => 'Password confirmation is required',
+                'password_confirmation.min' => 'Password confirmation must be at least 8 characters',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation Error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Verify code
+            $verification = EmailVerification::where('email', $request->email)
+                ->where('code', $request->code)
+                ->where('verified', false)
+                ->first();
+
+            if (!$verification) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid verification code',
+                ], 400);
+            }
+
+            if ($verification->expires_at->isPast()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Verification code has expired',
+                ], 400);
+            }
+
+            // Find user
+            $user = User::where('email', $request->email)->first();
+            
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                ], 404);
+            }
+
+            // Update password
+            $user->password = Hash::make($request->password);
+            $user->save();
+
+            // Mark verification as used
+            $verification->update(['verified' => true]);
+
+            // Create new token for the user
+            $token = $user->createToken('mobile-app')->plainTextToken;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password reset successfully',
+                'data' => [
+                    'token' => $token,
+                    'user' => $this->formatUserData($user),
+                ],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation Error',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Reset password error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to reset password: ' . $e->getMessage()
             ], 500);
         }
     }

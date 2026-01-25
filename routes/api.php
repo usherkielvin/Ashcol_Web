@@ -14,6 +14,8 @@ Route::prefix('v1')->group(function () {
     Route::post('/facebook-signin', [AuthController::class, 'facebookSignIn']);
     Route::post('/send-verification-code', [AuthController::class, 'sendVerificationCode']);
     Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
+    Route::post('/request-password-reset', [AuthController::class, 'requestPasswordReset']);
+    Route::post('/reset-password', [AuthController::class, 'resetPassword']);
     Route::post('/chatbot', [ChatbotController::class, 'handle']);
     
     // Protected routes
