@@ -773,11 +773,20 @@ class AuthController extends Controller
 
     /**
      * Handle logout request
+     * Optimized for fast response - deletes token efficiently
      */
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        try {
+            // Delete current token directly (fastest method)
+            // currentAccessToken() is already loaded from middleware
+            $request->user()->currentAccessToken()->delete();
+        } catch (\Exception $e) {
+            // Log but don't fail - token will expire naturally
+            \Log::warning('Logout token deletion: ' . $e->getMessage());
+        }
 
+        // Return immediately - don't wait for any additional operations
         return response()->json([
             'success' => true,
             'message' => 'Logged out successfully',

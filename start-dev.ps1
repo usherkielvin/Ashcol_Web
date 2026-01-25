@@ -24,6 +24,13 @@ Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; Write-
 # Wait a bit
 Start-Sleep -Seconds 2
 
+# Start Queue Worker (for async email sending)
+Write-Host "Starting Queue Worker..." -ForegroundColor Yellow
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; Write-Host 'Laravel Queue Worker' -ForegroundColor Green; Write-Host 'Processing queued jobs (emails, etc.)' -ForegroundColor Cyan; Write-Host ''; php artisan queue:work"
+
+# Wait a bit
+Start-Sleep -Seconds 2
+
 # Ask about MailHog
 $mailhog = Read-Host "Do you want to start MailHog? (Y/n)"
 if ($mailhog -ne 'n' -and $mailhog -ne 'N') {
@@ -43,9 +50,12 @@ Write-Host "====================================" -ForegroundColor Cyan
 Write-Host "Development servers started!" -ForegroundColor Green
 Write-Host "====================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Laravel:  http://localhost:8000" -ForegroundColor White
-Write-Host "Vite:     Check the Vite terminal window" -ForegroundColor White
-Write-Host "MailHog:  http://localhost:8025 (if started)" -ForegroundColor White
+Write-Host "Laravel:      http://localhost:8000" -ForegroundColor White
+Write-Host "Vite:         Check the Vite terminal window" -ForegroundColor White
+Write-Host "Queue Worker: Processing jobs in background" -ForegroundColor White
+Write-Host "MailHog:      http://localhost:8025 (if started)" -ForegroundColor White
+Write-Host ""
+Write-Host "✅ Emails will now send asynchronously (instant API response!)" -ForegroundColor Green
 Write-Host ""
 Write-Host "Press Ctrl+C in each terminal window to stop the servers" -ForegroundColor Yellow
 Write-Host ""
