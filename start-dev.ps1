@@ -60,21 +60,24 @@ if ($errors.Count -gt 0) {
 
 # Start Laravel Server
 Write-Host "Starting Laravel server..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; Write-Host 'Laravel Development Server' -ForegroundColor Green; Write-Host 'Running on http://localhost:8000' -ForegroundColor Cyan; Write-Host ''; php artisan serve"
+$laravelCmd = "cd '$PWD'; Write-Host 'Laravel Development Server' -ForegroundColor Green; Write-Host 'Running on http://localhost:8000' -ForegroundColor Cyan; Write-Host ''; php artisan serve"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", $laravelCmd
 
 # Wait a bit
 Start-Sleep -Seconds 2
 
 # Start Vite
 Write-Host "Starting Vite..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; Write-Host 'Vite Development Server' -ForegroundColor Green; Write-Host ''; npm run dev"
+$viteCmd = "cd '$PWD'; Write-Host 'Vite Development Server' -ForegroundColor Green; Write-Host ''; npm run dev"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", $viteCmd
 
 # Wait a bit
 Start-Sleep -Seconds 2
 
 # Start Queue Worker (for async email sending)
 Write-Host "Starting Queue Worker..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; Write-Host 'Laravel Queue Worker' -ForegroundColor Green; Write-Host 'Processing queued jobs (emails, etc.)' -ForegroundColor Cyan; Write-Host ''; php artisan queue:work"
+$queueCmd = "cd '$PWD'; Write-Host 'Laravel Queue Worker' -ForegroundColor Green; Write-Host 'Processing queued jobs (emails, etc.)' -ForegroundColor Cyan; Write-Host ''; php artisan queue:work"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", $queueCmd
 
 # Wait a bit
 Start-Sleep -Seconds 2
@@ -86,7 +89,8 @@ if ($mailhog -ne 'n' -and $mailhog -ne 'N') {
     $mailhogPath = Get-Command mailhog -ErrorAction SilentlyContinue
     if ($mailhogPath) {
         Write-Host "Starting MailHog..." -ForegroundColor Yellow
-        Start-Process powershell -ArgumentList "-NoExit", "-Command", "Write-Host 'MailHog SMTP Server' -ForegroundColor Green; Write-Host 'SMTP: localhost:1025' -ForegroundColor Cyan; Write-Host 'Web UI: http://localhost:8025' -ForegroundColor Cyan; Write-Host ''; mailhog"
+        $mailhogCmd = "Write-Host 'MailHog SMTP Server' -ForegroundColor Green; Write-Host 'SMTP: localhost:1025' -ForegroundColor Cyan; Write-Host 'Web UI: http://localhost:8025' -ForegroundColor Cyan; Write-Host ''; mailhog"
+        Start-Process powershell -ArgumentList "-NoExit", "-Command", $mailhogCmd
     } else {
         Write-Host "[WARNING] MailHog not found. Install with: choco install mailhog" -ForegroundColor Yellow
         Write-Host "[INFO] Or change MAIL_MAILER=log in .env to use log driver" -ForegroundColor Yellow
