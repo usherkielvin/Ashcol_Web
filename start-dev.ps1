@@ -49,18 +49,19 @@ if ($errors.Count -gt 0) {
     Write-Host "========================================" -ForegroundColor Red
     Write-Host ""
     foreach ($error in $errors) {
-        Write-Host "  ❌ $error" -ForegroundColor Red
+        Write-Host "  [X] $error" -ForegroundColor Red
     }
     Write-Host ""
-    Write-Host "💡 Run .\quick-setup.ps1 to check all prerequisites" -ForegroundColor Yellow
-    Write-Host "📖 See COLLABORATOR_SETUP.md for detailed setup instructions" -ForegroundColor Yellow
+    Write-Host "[TIP] Run .\quick-setup.ps1 to check all prerequisites" -ForegroundColor Yellow
+    Write-Host "[INFO] See COLLABORATOR_SETUP.md for detailed setup instructions" -ForegroundColor Yellow
     Write-Host ""
     exit 1
 }
 
 # Start Laravel Server
 Write-Host "Starting Laravel server..." -ForegroundColor Yellow
-$laravelCmd = "cd '$PWD'; Write-Host 'Laravel Development Server' -ForegroundColor Green; Write-Host 'Running on http://localhost:8000' -ForegroundColor Cyan; Write-Host ''; php artisan serve"
+$currentDir = $PWD.Path
+$laravelCmd = "cd '$currentDir'; Write-Host 'Laravel Development Server' -ForegroundColor Green; Write-Host 'Running on http://localhost:8000' -ForegroundColor Cyan; Write-Host ''; php artisan serve"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $laravelCmd
 
 # Wait a bit
@@ -68,7 +69,7 @@ Start-Sleep -Seconds 2
 
 # Start Vite
 Write-Host "Starting Vite..." -ForegroundColor Yellow
-$viteCmd = "cd '$PWD'; Write-Host 'Vite Development Server' -ForegroundColor Green; Write-Host ''; npm run dev"
+$viteCmd = "cd '$currentDir'; Write-Host 'Vite Development Server' -ForegroundColor Green; Write-Host ''; npm run dev"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $viteCmd
 
 # Wait a bit
@@ -76,7 +77,7 @@ Start-Sleep -Seconds 2
 
 # Start Queue Worker (for async email sending)
 Write-Host "Starting Queue Worker..." -ForegroundColor Yellow
-$queueCmd = "cd '$PWD'; Write-Host 'Laravel Queue Worker' -ForegroundColor Green; Write-Host 'Processing queued jobs (emails, etc.)' -ForegroundColor Cyan; Write-Host ''; php artisan queue:work"
+$queueCmd = "cd '$currentDir'; Write-Host 'Laravel Queue Worker' -ForegroundColor Green; Write-Host 'Processing queued jobs (emails, etc.)' -ForegroundColor Cyan; Write-Host ''; php artisan queue:work"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $queueCmd
 
 # Wait a bit
@@ -107,7 +108,7 @@ Write-Host "Vite:         Check the Vite terminal window" -ForegroundColor White
 Write-Host "Queue Worker: Processing jobs in background" -ForegroundColor White
 Write-Host "MailHog:      http://localhost:8025 (if started)" -ForegroundColor White
 Write-Host ""
-Write-Host "✅ Emails will now send asynchronously (instant API response!)" -ForegroundColor Green
+Write-Host "[OK] Emails will now send asynchronously (instant API response!)" -ForegroundColor Green
 Write-Host ""
 Write-Host "Press Ctrl+C in each terminal window to stop the servers" -ForegroundColor Yellow
 Write-Host ""
