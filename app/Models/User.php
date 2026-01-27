@@ -37,6 +37,7 @@ class User extends Authenticatable
         'password',
         'role',
         'phone',
+        'location',
         'profile_photo',
         // facebook_id is now stored in facebook_accounts table, not here
     ];

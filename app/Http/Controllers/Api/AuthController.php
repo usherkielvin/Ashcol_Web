@@ -46,6 +46,7 @@ class AuthController extends Controller
             'name' => $user->name ?? trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? '')),
             'email' => $user->email ?? null,
             'role' => $user->role ?? 'customer',
+            'location' => $user->location ?? null,
             'profile_photo' => $profilePhotoUrl,
             'has_facebook_account' => $hasFacebookAccount,
         ];
@@ -534,6 +535,7 @@ class AuthController extends Controller
                 'password' => 'required|string|min:8|confirmed',
                 'password_confirmation' => 'required|string|min:8',
                 'role' => 'required|string|in:customer,manager',
+                'location' => 'nullable|string|max:255',
             ], [
                 'email.unique' => 'Email already used',
                 'email.required' => 'Email is required',
@@ -586,6 +588,7 @@ class AuthController extends Controller
                 'email' => $input['email'],
                 'password' => Hash::make($input['password']),
                 'role' => $input['role'],
+                'location' => $input['location'] ?? null,
             ]);
 
             // Send verification code email asynchronously (non-blocking)
