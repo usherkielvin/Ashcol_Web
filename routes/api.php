@@ -29,6 +29,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/profile/photo', [ProfileController::class, 'uploadPhoto']);
         Route::put('/profile/photo', [ProfileController::class, 'updatePhoto']);
         Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto']);
+        Route::post('/update-location', [ProfileController::class, 'updateLocation']);
         Route::post('/tickets', [TicketController::class, 'store']);
         Route::get('/employees', [ProfileController::class, 'getEmployees']);
     });
