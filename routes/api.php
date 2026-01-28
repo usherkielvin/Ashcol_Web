@@ -30,6 +30,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/profile/photo', [ProfileController::class, 'updatePhoto']);
         Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto']);
         Route::post('/tickets', [TicketController::class, 'store']);
+        Route::get('/employees', [ProfileController::class, 'getEmployees']);
     });
 });
 

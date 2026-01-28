@@ -179,6 +179,90 @@ class ProfileController extends Controller
     }
 
     /**
+     * Get employees for the current manager's branch
+     */
+    public function getEmployees(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated',
+            ], 401);
+        }
+
+        // Check if user is a manager
+        if ($user->role !== 'manager') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Access denied. Only managers can view employees.',
+            ], 403);
+        }
+
+        // Get manager's branch
+        $managerBranch = $user->branch;
+        
+        if (!$managerBranch) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Manager has no branch assigned.',
+            ], 400);
+        }
+
+        // Get employees in the same branch
+        $employees = DB::table('users')
+            ->where('role', 'employee')
+            ->where('branch', $managerBranch)
+            ->select('id', 'username', 'firstName', 'lastName', 'name', 'email', 'profile_photo', 'created_at')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Format employee data
+        $formattedEmployees = $employees->map(function ($employee) {
+            // Build name from firstName and lastName if name field is empty
+            $firstName = $employee->firstName ?? null;
+            $lastName = $employee->lastName ?? null;
+            $name = $employee->name ?? null;
+            
+            if (empty($name) && (!empty($firstName) || !empty($lastName))) {
+                $nameParts = array_filter([$firstName, $lastName]);
+                $name = trim(implode(' ', $nameParts));
+            }
+            
+            // Get profile photo URL
+            $profilePhotoUrl = null;
+            if ($employee->profile_photo) {
+                if (strpos($employee->profile_photo, 'http') === 0) {
+                    $profilePhotoUrl = $employee->profile_photo;
+                } else {
+                    $profilePhotoUrl = asset('storage/' . $employee->profile_photo);
+                }
+            }
+
+            return [
+                'id' => $employee->id,
+                'username' => $employee->username,
+                'firstName' => $firstName,
+                'lastName' => $lastName,
+                'name' => $name ?: ($firstName . ' ' . $lastName),
+                'email' => $employee->email,
+                'profile_photo' => $profilePhotoUrl,
+                'created_at' => $employee->created_at,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'branch' => $managerBranch,
+                'employee_count' => $formattedEmployees->count(),
+                'employees' => $formattedEmployees,
+            ],
+        ]);
+    }
+
+    /**
      * Delete profile photo
      */
     public function deletePhoto(Request $request)
