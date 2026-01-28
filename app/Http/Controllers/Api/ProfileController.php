@@ -99,6 +99,8 @@ class ProfileController extends Controller
                 'name' => $name,
                 'email' => $email,
                 'role' => $user->role ?? 'customer',
+                'location' => $user->location ?? null,
+                'branch' => $user->branch ?? null,
                 'profile_photo' => $profilePhotoUrl,
                 'has_facebook_account' => $hasFacebookAccount,
             ],
