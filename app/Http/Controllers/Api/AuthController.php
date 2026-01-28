@@ -141,7 +141,7 @@ class AuthController extends Controller
 
     /**
      * Handle Google Sign-In
-     * Verifies Google ID token and creates/logs in user
+     * Verifies Google ID token and only allows login for existing users (no account creation)
      */
     public function googleSignIn(Request $request)
     {
@@ -169,7 +169,7 @@ class AuthController extends Controller
             $lastName = $request->input('last_name', '');
             $phone = $request->input('phone', '');
 
-            // Check if user exists
+            // Check if user exists - ONLY allow login for existing users
             $user = User::where('email', $email)->first();
 
             if ($user) {
@@ -195,41 +195,11 @@ class AuthController extends Controller
                     ],
                 ]);
             } else {
-                // New user - create account
-                // Generate username from email
-                $username = explode('@', $email)[0];
-                $baseUsername = $username;
-                $counter = 1;
-                
-                // Ensure username is unique
-                while (User::where('username', $username)->exists()) {
-                    $username = $baseUsername . $counter;
-                    $counter++;
-                }
-
-                // Create user
-                $user = User::create([
-                    'username' => $username,
-                    'firstName' => $firstName ?: 'User',
-                    'lastName' => $lastName ?: '',
-                    'name' => trim(($firstName ?: 'User') . ' ' . ($lastName ?: '')),
-                    'email' => $email,
-                    'password' => Hash::make(uniqid('google_', true)), // Random password - will be updated when user sets password
-                    'role' => 'customer', // Default role
-                    'phone' => $phone,
-                    'email_verified_at' => now(), // Google emails are verified
-                ]);
-
-                $token = $user->createToken('mobile-app')->plainTextToken;
-
+                // User does not exist - return error instead of creating account
                 return response()->json([
-                    'success' => true,
-                    'message' => 'Account created successfully',
-                    'data' => [
-                        'token' => $token,
-                        'user' => $this->formatUserData($user),
-                    ],
-                ], 201);
+                    'success' => false,
+                    'message' => 'Account not found. Please register first before signing in with Google.',
+                ], 404);
             }
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
