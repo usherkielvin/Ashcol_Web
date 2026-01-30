@@ -6,9 +6,11 @@ use App\Http\Requests\UpdateTicketRequest;
 use App\Models\Ticket;
 use App\Models\TicketStatus;
 use App\Models\User;
+use App\Services\BranchAssignmentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Log;
 
 class TicketController extends Controller
 {
@@ -109,6 +111,17 @@ class TicketController extends Controller
             $data['status_id'] = TicketStatus::getDefault()->id;
             $data['priority'] = Ticket::PRIORITY_MEDIUM; // Default priority
             $data['title'] = 'Service Request'; // Default title
+            $data['ticket_id'] = Ticket::generateTicketId(); // Generate unique ticket ID
+
+            // Assign branch based on user location
+            $branchService = new BranchAssignmentService();
+            $branch = $branchService->getBranchForTicket($user);
+            if ($branch) {
+                $data['branch_id'] = $branch->id;
+                Log::info("Assigned branch {$branch->name} to ticket for user {$user->id}");
+            } else {
+                Log::warning("No branch could be assigned to ticket for user {$user->id}");
+            }
 
             // Handle image upload
             if ($request->hasFile('image')) {
@@ -126,7 +139,9 @@ class TicketController extends Controller
 
             return response()->json([
                 'message' => 'Ticket created successfully.',
-                'ticket' => $ticket->load(['customer', 'status']),
+                'ticket' => $ticket->load(['customer', 'status', 'branch']),
+                'ticket_id' => $ticket->ticket_id,
+                'status' => 'Pending', // Default status for new tickets
             ], 201);
         } else {
             // Web form validation
@@ -151,11 +166,19 @@ class TicketController extends Controller
             $validated = $request->validate($rules);
 
             $data = $validated;
+            $data['ticket_id'] = Ticket::generateTicketId(); // Generate unique ticket ID
 
             // Customers can only create tickets for themselves
             if ($user->isCustomer()) {
                 $data['customer_id'] = $user->id;
                 $data['status_id'] = TicketStatus::getDefault()->id;
+                
+                // Assign branch based on user location
+                $branchService = new BranchAssignmentService();
+                $branch = $branchService->getBranchForTicket($user);
+                if ($branch) {
+                    $data['branch_id'] = $branch->id;
+                }
             }
 
             // If no staff assigned, set to null

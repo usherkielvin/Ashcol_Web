@@ -30,7 +30,15 @@ Route::prefix('v1')->group(function () {
         Route::put('/profile/photo', [ProfileController::class, 'updatePhoto']);
         Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto']);
         Route::post('/update-location', [ProfileController::class, 'updateLocation']);
+        
+        // Ticket routes
         Route::post('/tickets', [TicketController::class, 'store']);
+        Route::get('/tickets', [\App\Http\Controllers\Api\TicketController::class, 'index']);
+        Route::get('/tickets/{ticketId}', [\App\Http\Controllers\Api\TicketController::class, 'show']);
+        Route::put('/tickets/{ticketId}/status', [\App\Http\Controllers\Api\TicketController::class, 'updateStatus']);
+        Route::post('/tickets/{ticketId}/accept', [\App\Http\Controllers\Api\TicketController::class, 'accept']);
+        Route::post('/tickets/{ticketId}/reject', [\App\Http\Controllers\Api\TicketController::class, 'reject']);
+        
         Route::get('/employees', [ProfileController::class, 'getEmployees']);
     });
 });

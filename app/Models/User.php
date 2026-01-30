@@ -103,7 +103,7 @@ class User extends Authenticatable
      */
     public function isAdminOrStaff(): bool
     {
-        return $this->isAdmin() || $this->isStaff();
+        return $this->isAdmin() || $this->isStaff() || $this->isManager();
     }
 
     /**

@@ -12,11 +12,13 @@ class Ticket extends Model
     use HasFactory;
 
     protected $fillable = [
+        'ticket_id',
         'title',
         'description',
         'customer_id',
         'assigned_staff_id',
         'status_id',
+        'branch_id',
         'priority',
         'address',
         'contact',
@@ -67,6 +69,26 @@ class Ticket extends Model
     public function comments(): HasMany
     {
         return $this->hasMany(TicketComment::class);
+    }
+
+    /**
+     * Get the branch assigned to this ticket
+     */
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    /**
+     * Generate unique ticket ID
+     */
+    public static function generateTicketId()
+    {
+        do {
+            $ticketId = 'TCKTId_' . str_pad(rand(1, 9999), 4, '0', STR_PAD_LEFT);
+        } while (self::where('ticket_id', $ticketId)->exists());
+
+        return $ticketId;
     }
 
     /**
