@@ -141,6 +141,92 @@ class AuthController extends Controller
     }
 
     /**
+     * Handle Google Registration (for new users)
+     * Creates a new account using Google authentication
+     */
+    public function googleRegister(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_token' => 'nullable|string', // Optional - may be null if not configured
+                'email' => 'required|string|email',
+                'first_name' => 'nullable|string|max:255',
+                'last_name' => 'nullable|string|max:255',
+                'phone' => 'nullable|string|max:20',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation Error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $email = $request->email;
+            $firstName = $request->input('first_name', '');
+            $lastName = $request->input('last_name', '');
+            $phone = $request->input('phone', '');
+
+            // Check if user already exists
+            $existingUser = User::where('email', $email)->first();
+            if ($existingUser) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Account already exists. Please sign in instead.',
+                ], 409); // Conflict status code
+            }
+
+            // Generate username from email
+            $username = explode('@', $email)[0];
+            $baseUsername = $username;
+            $counter = 1;
+            
+            // Ensure username is unique
+            while (User::where('username', $username)->exists()) {
+                $username = $baseUsername . $counter;
+                $counter++;
+            }
+
+            // Create new user
+            $user = User::create([
+                'username' => $username,
+                'firstName' => $firstName ?: 'User',
+                'lastName' => $lastName ?: '',
+                'name' => trim(($firstName ?: 'User') . ' ' . ($lastName ?: '')),
+                'email' => $email,
+                'password' => Hash::make(uniqid('google_', true)), // Random password
+                'role' => 'customer', // Default role
+                'phone' => $phone,
+                'email_verified_at' => now(), // Google emails are verified
+            ]);
+
+            $token = $user->createToken('mobile-app')->plainTextToken;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Account created successfully',
+                'data' => [
+                    'token' => $token,
+                    'user' => $this->formatUserData($user),
+                ],
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation Error',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Google Registration error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Registration failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Handle Google Sign-In
      * Verifies Google ID token and only allows login for existing users (no account creation)
      */
