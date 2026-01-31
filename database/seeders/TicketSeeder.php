@@ -26,6 +26,7 @@ class TicketSeeder extends Seeder
 
         // Customer ticket (unassigned)
         Ticket::create([
+            'ticket_id' => 'TCKT_' . str_pad(1, 4, '0', STR_PAD_LEFT),
             'title' => 'Cannot log in to portal',
             'description' => 'I am unable to log in with my credentials since this morning.',
             'customer_id' => $customer->id,
@@ -36,6 +37,7 @@ class TicketSeeder extends Seeder
 
         // Assigned to staff
         Ticket::create([
+            'ticket_id' => 'TCKT_' . str_pad(2, 4, '0', STR_PAD_LEFT),
             'title' => 'Payment not reflected',
             'description' => 'Payment made yesterday is not showing in my account.',
             'customer_id' => $customer->id,
@@ -46,6 +48,7 @@ class TicketSeeder extends Seeder
 
         // Admin created ticket for customer
         Ticket::create([
+            'ticket_id' => 'TCKT_' . str_pad(3, 4, '0', STR_PAD_LEFT),
             'title' => 'Update account information',
             'description' => 'Please update my contact number and address.',
             'customer_id' => $customer->id,
@@ -56,6 +59,7 @@ class TicketSeeder extends Seeder
 
         // Resolved example
         Ticket::create([
+            'ticket_id' => 'TCKT_' . str_pad(4, 4, '0', STR_PAD_LEFT),
             'title' => 'Unable to download invoice',
             'description' => 'Download button results in 500 error.',
             'customer_id' => $customer->id,

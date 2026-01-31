@@ -7,6 +7,7 @@ use App\Models\Ticket;
 use App\Models\TicketStatus;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class TicketController extends Controller
@@ -121,6 +122,8 @@ class TicketController extends Controller
                 'assigned_staff' => $ticket->assignedStaff ? $ticket->assignedStaff->firstName . ' ' . $ticket->assignedStaff->lastName : null,
                 'branch' => $ticket->branch->name ?? null,
                 'image_path' => $ticket->image_path,
+                'latitude' => $ticket->customer->latitude ?? 0,
+                'longitude' => $ticket->customer->longitude ?? 0,
                 'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
                 'updated_at' => $ticket->updated_at->format('Y-m-d H:i:s'),
                 'comments' => $ticket->comments->map(function ($comment) {
@@ -242,5 +245,214 @@ class TicketController extends Controller
     {
         $request->merge(['status' => 'cancelled']);
         return $this->updateStatus($request, $ticketId);
+    }
+    
+    /**
+     * Get tickets for manager (branch-specific)
+     */
+    public function getManagerTickets(Request $request)
+    {
+        $startTime = microtime(true);
+        \Log::info('Manager tickets request started');
+        
+        $user = $request->user();
+        
+        if (!$user->isManager() && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to view manager tickets',
+            ], 403);
+        }
+        
+        \Log::info('Authorization check passed', ['user_id' => $user->id, 'branch' => $user->branch]);
+        
+        // Cache key for manager tickets
+        $cacheKey = "manager_tickets_{$user->id}_{$user->branch}";
+        
+        // Try to get from cache first (cache for 2 minutes for tickets)
+        $cachedData = Cache::get($cacheKey);
+        if ($cachedData) {
+            \Log::info('Returning cached data');
+            return response()->json([
+                'success' => true,
+                'tickets' => $cachedData,
+                'cached' => true,
+            ]);
+        }
+        
+        \Log::info('No cache found, querying database');
+        
+        // Get manager's branch ID for efficient filtering
+        $managerBranchId = null;
+        if ($user->isManager() && $user->branch) {
+            $branchStart = microtime(true);
+            // Use a simple cache for branch ID lookup to avoid repeated queries
+            $branchCacheKey = "branch_id_{$user->branch}";
+            $managerBranchId = Cache::remember($branchCacheKey, 3600, function () use ($user) {
+                $branch = \App\Models\Branch::where('name', $user->branch)->first();
+                return $branch ? $branch->id : null;
+            });
+            $branchEnd = microtime(true);
+            \Log::info('Branch lookup completed', ['time' => ($branchEnd - $branchStart) * 1000 . 'ms', 'branch_id' => $managerBranchId]);
+        }
+        
+        $queryStart = microtime(true);
+        // Simplified query - remove some eager loading to speed up
+        $query = Ticket::with(['status', 'customer']);
+        
+        // Filter by branch_id directly (much faster than whereHas)
+        if ($managerBranchId) {
+            $query->where('branch_id', $managerBranchId);
+        }
+        
+        $tickets = $query->orderBy('created_at', 'desc')->get();
+        $queryEnd = microtime(true);
+        \Log::info('Database query completed', ['time' => ($queryEnd - $queryStart) * 1000 . 'ms', 'count' => $tickets->count()]);
+        
+        $mapStart = microtime(true);
+        $ticketData = $tickets->map(function ($ticket) {
+            $customerName = '';
+            if ($ticket->customer) {
+                $firstName = $ticket->customer->firstName ?? '';
+                $lastName = $ticket->customer->lastName ?? '';
+                $customerName = trim($firstName . ' ' . $lastName);
+            }
+            
+            return [
+                'id' => $ticket->id,
+                'ticket_id' => $ticket->ticket_id ?? '',
+                'title' => $ticket->title ?? '',
+                'description' => $ticket->description ?? '',
+                'service_type' => $ticket->service_type ?? '',
+                'address' => $ticket->address ?? '',
+                'contact' => $ticket->contact ?? '',
+                'priority' => $ticket->priority ?? 'medium',
+                'status' => $ticket->status->name ?? 'Unknown',
+                'status_color' => $ticket->status->color ?? '#gray',
+                'customer_name' => $customerName,
+                'assigned_staff' => null, // Simplified for now
+                'branch' => null, // Simplified for now
+                'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
+                'updated_at' => $ticket->updated_at->format('Y-m-d H:i:s'),
+            ];
+        });
+        $mapEnd = microtime(true);
+        \Log::info('Data mapping completed', ['time' => ($mapEnd - $mapStart) * 1000 . 'ms']);
+        
+        // Cache the result for 2 minutes
+        Cache::put($cacheKey, $ticketData, 120);
+        
+        $endTime = microtime(true);
+        \Log::info('Manager tickets request completed', ['total_time' => ($endTime - $startTime) * 1000 . 'ms']);
+        
+        return response()->json([
+            'success' => true,
+            'tickets' => $ticketData,
+        ]);
+    }
+
+    /**
+     * Clear manager tickets cache (called when tickets are updated)
+     */
+    public static function clearManagerTicketsCache($branchName)
+    {
+        // Clear cache for all managers in this branch
+        $managers = \App\Models\User::where('role', 'manager')
+            ->where('branch', $branchName)
+            ->select('id')
+            ->get();
+
+        foreach ($managers as $manager) {
+            $cacheKey = "manager_tickets_{$manager->id}_{$branchName}";
+            Cache::forget($cacheKey);
+        }
+    }
+
+    /**
+     * Get tickets assigned to employee
+     */
+    public function getEmployeeTickets(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user->isStaff() && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to view employee tickets',
+            ], 403);
+        }
+        
+        $query = Ticket::with(['status', 'customer', 'branch']);
+        
+        // Filter by assigned staff for employees
+        if ($user->isStaff()) {
+            $query->where('assigned_staff_id', $user->id);
+        }
+        
+        $tickets = $query->orderBy('created_at', 'desc')->get();
+        
+        return response()->json([
+            'success' => true,
+            'tickets' => $tickets->map(function ($ticket) {
+                return [
+                    'id' => $ticket->id,
+                    'ticket_id' => $ticket->ticket_id,
+                    'title' => $ticket->title,
+                    'description' => $ticket->description,
+                    'service_type' => $ticket->service_type,
+                    'address' => $ticket->address,
+                    'contact' => $ticket->contact,
+                    'priority' => $ticket->priority,
+                    'status' => $ticket->status->name ?? 'Unknown',
+                    'status_color' => $ticket->status->color ?? '#gray',
+                    'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
+                    'branch' => $ticket->branch->name ?? null,
+                    'latitude' => $ticket->customer->latitude ?? 0,
+                    'longitude' => $ticket->customer->longitude ?? 0,
+                    'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
+                    'updated_at' => $ticket->updated_at->format('Y-m-d H:i:s'),
+                ];
+            }),
+        ]);
+    }
+
+    /**
+     * Get employees for staff assignment
+     */
+    public function getEmployees(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user->isManager() && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to view employees',
+            ], 403);
+        }
+        
+        // Optimized query with specific column selection
+        $query = User::select('id', 'firstName', 'lastName', 'email', 'role', 'branch')
+            ->where('role', 'staff');
+        
+        // Filter by branch for managers (will use the new index)
+        if ($user->isManager() && $user->branch) {
+            $query->where('branch', $user->branch);
+        }
+        
+        $employees = $query->get();
+        
+        return response()->json([
+            'success' => true,
+            'employees' => $employees->map(function ($employee) {
+                return [
+                    'id' => $employee->id,
+                    'firstName' => $employee->firstName,
+                    'lastName' => $employee->lastName,
+                    'email' => $employee->email,
+                    'role' => $employee->role,
+                    'branch' => $employee->branch,
+                ];
+            }),
+        ]);
     }
 }

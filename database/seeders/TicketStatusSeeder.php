@@ -19,13 +19,28 @@ class TicketStatusSeeder extends Seeder
                 'is_default' => true,
             ],
             [
+                'name' => 'Pending',
+                'color' => '#F59E0B', // Orange
+                'is_default' => false,
+            ],
+            [
+                'name' => 'Accepted',
+                'color' => '#3B82F6', // Blue
+                'is_default' => false,
+            ],
+            [
                 'name' => 'In Progress',
                 'color' => '#3B82F6', // Blue
                 'is_default' => false,
             ],
             [
-                'name' => 'Pending',
-                'color' => '#F59E0B', // Orange
+                'name' => 'Completed',
+                'color' => '#10B981', // Green
+                'is_default' => false,
+            ],
+            [
+                'name' => 'Cancelled',
+                'color' => '#EF4444', // Red
                 'is_default' => false,
             ],
             [

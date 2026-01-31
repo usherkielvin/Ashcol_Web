@@ -23,8 +23,8 @@ class BranchAssignmentService
     public function assignBranchToUser(User $user)
     {
         if (!$user->location) {
-            Log::warning("User {$user->id} has no location set, cannot assign branch");
-            return null;
+            Log::warning("User {$user->id} has no location set, assigning default branch");
+            return $this->assignDefaultBranch($user);
         }
 
         // Get coordinates from user's location using Google Maps API
@@ -56,6 +56,14 @@ class BranchAssignmentService
         }
 
         // If no specific branch found, assign default branch
+        return $this->assignDefaultBranch($user);
+    }
+
+    /**
+     * Assign default branch to user
+     */
+    private function assignDefaultBranch(User $user)
+    {
         $defaultBranch = Branch::active()->first();
         if ($defaultBranch) {
             $user->update(['branch' => $defaultBranch->name]);

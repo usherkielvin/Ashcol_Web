@@ -40,7 +40,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/tickets/{ticketId}/accept', [\App\Http\Controllers\Api\TicketController::class, 'accept']);
         Route::post('/tickets/{ticketId}/reject', [\App\Http\Controllers\Api\TicketController::class, 'reject']);
         
-        Route::get('/employees', [ProfileController::class, 'getEmployees']);
+        // Manager-specific routes
+        Route::get('/manager/tickets', [\App\Http\Controllers\Api\TicketController::class, 'getManagerTickets']);
+        
+        // Employee-specific routes
+        Route::get('/employee/tickets', [\App\Http\Controllers\Api\TicketController::class, 'getEmployeeTickets']);
+        
+        Route::get('/employees', [\App\Http\Controllers\Api\TicketController::class, 'getEmployees']);
     });
 });
 
