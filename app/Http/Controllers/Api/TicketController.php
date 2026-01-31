@@ -13,16 +13,44 @@ use Illuminate\Support\Facades\Log;
 class TicketController extends Controller
 {
     /**
+     * Simple test endpoint for debugging
+     */
+    public function test(Request $request)
+    {
+        $user = $request->user();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'API is working',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->firstName . ' ' . $user->lastName,
+                'email' => $user->email,
+                'role' => $user->role,
+                'is_customer' => $user->isCustomer(),
+            ],
+            'timestamp' => now()->toDateTimeString(),
+        ]);
+    }
+    
+    /**
      * Get user's tickets
      */
     public function index(Request $request)
     {
         $user = $request->user();
         
+        Log::info('TicketController@index called', [
+            'user_id' => $user->id,
+            'user_role' => $user->role,
+            'is_customer' => $user->isCustomer()
+        ]);
+        
         $query = Ticket::with(['customer', 'assignedStaff', 'status', 'branch']);
         
         // Filter based on user role
         if ($user->isCustomer()) {
+            Log::info('Filtering tickets for customer', ['customer_id' => $user->id]);
             $query->where('customer_id', $user->id);
         } elseif ($user->isManager() || $user->isStaff()) {
             // Managers and staff see tickets from their branch
@@ -44,6 +72,8 @@ class TicketController extends Controller
         }
         
         $tickets = $query->latest()->get();
+        
+        Log::info('Tickets found', ['count' => $tickets->count()]);
         
         return response()->json([
             'success' => true,

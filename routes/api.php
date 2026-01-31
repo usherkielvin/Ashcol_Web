@@ -3,7 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ChatbotController;
 use App\Http\Controllers\Api\ProfileController;
-use App\Http\Controllers\TicketController;
+use App\Http\Controllers\Api\TicketController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -32,21 +32,22 @@ Route::prefix('v1')->group(function () {
         Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto']);
         Route::post('/update-location', [ProfileController::class, 'updateLocation']);
         
-        // Ticket routes
-        Route::post('/tickets', [TicketController::class, 'store']);
-        Route::get('/tickets', [\App\Http\Controllers\Api\TicketController::class, 'index']);
-        Route::get('/tickets/{ticketId}', [\App\Http\Controllers\Api\TicketController::class, 'show']);
-        Route::put('/tickets/{ticketId}/status', [\App\Http\Controllers\Api\TicketController::class, 'updateStatus']);
-        Route::post('/tickets/{ticketId}/accept', [\App\Http\Controllers\Api\TicketController::class, 'accept']);
-        Route::post('/tickets/{ticketId}/reject', [\App\Http\Controllers\Api\TicketController::class, 'reject']);
+        // Ticket routes - using the API TicketController
+        Route::get('/test', [TicketController::class, 'test']); // Test endpoint
+        Route::post('/tickets', [\App\Http\Controllers\TicketController::class, 'store']); // This uses the web controller for ticket creation
+        Route::get('/tickets', [TicketController::class, 'index']);
+        Route::get('/tickets/{ticketId}', [TicketController::class, 'show']);
+        Route::put('/tickets/{ticketId}/status', [TicketController::class, 'updateStatus']);
+        Route::post('/tickets/{ticketId}/accept', [TicketController::class, 'accept']);
+        Route::post('/tickets/{ticketId}/reject', [TicketController::class, 'reject']);
         
         // Manager-specific routes
-        Route::get('/manager/tickets', [\App\Http\Controllers\Api\TicketController::class, 'getManagerTickets']);
+        Route::get('/manager/tickets', [TicketController::class, 'getManagerTickets']);
         
         // Employee-specific routes
-        Route::get('/employee/tickets', [\App\Http\Controllers\Api\TicketController::class, 'getEmployeeTickets']);
+        Route::get('/employee/tickets', [TicketController::class, 'getEmployeeTickets']);
         
-        Route::get('/employees', [\App\Http\Controllers\Api\ProfileController::class, 'getEmployees']);
+        Route::get('/employees', [TicketController::class, 'getEmployees']);
     });
 });
 
