@@ -46,7 +46,7 @@ Route::prefix('v1')->group(function () {
         // Employee-specific routes
         Route::get('/employee/tickets', [\App\Http\Controllers\Api\TicketController::class, 'getEmployeeTickets']);
         
-        Route::get('/employees', [\App\Http\Controllers\Api\TicketController::class, 'getEmployees']);
+        Route::get('/employees', [\App\Http\Controllers\Api\ProfileController::class, 'getEmployees']);
     });
 });
 
