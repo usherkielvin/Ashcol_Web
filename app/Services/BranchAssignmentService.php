@@ -5,11 +5,20 @@ namespace App\Services;
 use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 
 class BranchAssignmentService
 {
+    private $googleMapsApiKey;
+
+    public function __construct()
+    {
+        $this->googleMapsApiKey = config('services.google.maps_api_key', env('GOOGLE_MAPS_API_KEY'));
+    }
+
     /**
-     * Assign branch to user based on their location
+     * Assign branch to user based on their location using Google Maps API
      */
     public function assignBranchToUser(User $user)
     {
@@ -18,21 +27,31 @@ class BranchAssignmentService
             return null;
         }
 
-        // Try to find branch by coordinates if user has them
-        if ($user->latitude && $user->longitude) {
-            $branch = Branch::findNearestBranch($user->latitude, $user->longitude);
+        // Get coordinates from user's location using Google Maps API
+        $coordinates = $this->getCoordinatesFromAddress($user->location);
+        
+        if ($coordinates) {
+            // Update user with coordinates for future use
+            $user->update([
+                'latitude' => $coordinates['lat'],
+                'longitude' => $coordinates['lng']
+            ]);
+
+            // Find nearest branch using coordinates
+            $branch = $this->findNearestBranchWithDistance($coordinates['lat'], $coordinates['lng']);
+            
             if ($branch) {
-                $user->update(['branch' => $branch->name]);
-                Log::info("Assigned branch {$branch->name} to user {$user->id} based on coordinates");
-                return $branch;
+                $user->update(['branch' => $branch['branch']->name]);
+                Log::info("Assigned branch {$branch['branch']->name} to user {$user->id} (distance: {$branch['distance']}km)");
+                return $branch['branch'];
             }
         }
 
-        // Fallback: Find branch by location name
-        $branch = Branch::findByLocation($user->location);
+        // Fallback: Try to find branch by location name similarity
+        $branch = $this->findBranchByLocationSimilarity($user->location);
         if ($branch) {
             $user->update(['branch' => $branch->name]);
-            Log::info("Assigned branch {$branch->name} to user {$user->id} based on location name");
+            Log::info("Assigned branch {$branch->name} to user {$user->id} based on location similarity");
             return $branch;
         }
 
@@ -66,74 +85,211 @@ class BranchAssignmentService
     }
 
     /**
-     * Location to branch mapping for Philippine cities
+     * Get coordinates from address using Google Maps Geocoding API
      */
-    private function getLocationToBranchMapping()
+    private function getCoordinatesFromAddress($address)
     {
-        return [
-            // Metro Manila
-            'Manila' => 'Manila Central Branch',
-            'Manila City' => 'Manila Central Branch',
-            'Makati' => 'Makati Business District Branch',
-            'Makati City' => 'Makati Business District Branch',
-            'Taguig' => 'BGC Taguig Branch',
-            'Taguig City' => 'BGC Taguig Branch',
-            'Pasay' => 'Pasay Branch',
-            'Pasay City' => 'Pasay Branch',
-            'Quezon City' => 'Quezon City Branch',
-            'Pasig' => 'Pasig Branch',
-            'Pasig City' => 'Pasig Branch',
-            'Mandaluyong' => 'Mandaluyong Branch',
-            'Mandaluyong City' => 'Mandaluyong Branch',
-            'San Juan' => 'San Juan Branch',
-            'San Juan City' => 'San Juan Branch',
-            'Marikina' => 'Marikina Branch',
-            'Marikina City' => 'Marikina Branch',
-            'Caloocan' => 'North Metro Manila Branch',
-            'Caloocan City' => 'North Metro Manila Branch',
-            'Valenzuela' => 'North Metro Manila Branch',
-            'Valenzuela City' => 'North Metro Manila Branch',
-            'Las Piñas' => 'South Metro Manila Branch',
-            'Las Piñas City' => 'South Metro Manila Branch',
-            'Parañaque' => 'South Metro Manila Branch',
-            'Parañaque City' => 'South Metro Manila Branch',
-            'Muntinlupa' => 'South Metro Manila Branch',
-            'Muntinlupa City' => 'South Metro Manila Branch',
-            'Navotas' => 'North Metro Manila Branch',
-            'Navotas City' => 'North Metro Manila Branch',
-            'Malabon' => 'North Metro Manila Branch',
-            'Malabon City' => 'North Metro Manila Branch',
+        if (!$this->googleMapsApiKey) {
+            Log::warning("Google Maps API key not configured, falling back to manual assignment");
+            return null;
+        }
+
+        // Cache the result for 24 hours to avoid repeated API calls
+        $cacheKey = 'geocode_' . md5($address);
+        
+        return Cache::remember($cacheKey, 86400, function () use ($address) {
+            try {
+                $response = Http::get('https://maps.googleapis.com/maps/api/geocode/json', [
+                    'address' => $address . ', Philippines', // Ensure we're searching within Philippines
+                    'key' => $this->googleMapsApiKey,
+                    'region' => 'ph', // Bias results to Philippines
+                ]);
+
+                if ($response->successful()) {
+                    $data = $response->json();
+                    
+                    if ($data['status'] === 'OK' && !empty($data['results'])) {
+                        $location = $data['results'][0]['geometry']['location'];
+                        
+                        // Verify the result is within Philippines bounds
+                        if ($this->isWithinPhilippines($location['lat'], $location['lng'])) {
+                            Log::info("Geocoded address '{$address}' to coordinates: {$location['lat']}, {$location['lng']}");
+                            return $location;
+                        } else {
+                            Log::warning("Geocoded address '{$address}' is outside Philippines bounds");
+                        }
+                    } else {
+                        Log::warning("Google Maps API could not geocode address: {$address}. Status: {$data['status']}");
+                    }
+                } else {
+                    Log::error("Google Maps API request failed for address: {$address}");
+                }
+            } catch (\Exception $e) {
+                Log::error("Error geocoding address '{$address}': " . $e->getMessage());
+            }
+
+            return null;
+        });
+    }
+
+    /**
+     * Find nearest branch with distance calculation
+     */
+    private function findNearestBranchWithDistance($userLatitude, $userLongitude)
+    {
+        $branches = Branch::active()
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->get();
+
+        if ($branches->isEmpty()) {
+            return null;
+        }
+
+        $nearestBranch = null;
+        $shortestDistance = PHP_FLOAT_MAX;
+
+        foreach ($branches as $branch) {
+            $distance = $this->calculateDistance(
+                $userLatitude,
+                $userLongitude,
+                $branch->latitude,
+                $branch->longitude
+            );
+
+            if ($distance < $shortestDistance) {
+                $shortestDistance = $distance;
+                $nearestBranch = $branch;
+            }
+        }
+
+        return $nearestBranch ? [
+            'branch' => $nearestBranch,
+            'distance' => round($shortestDistance, 2)
+        ] : null;
+    }
+
+    /**
+     * Find branch by location name similarity using fuzzy matching
+     */
+    private function findBranchByLocationSimilarity($userLocation)
+    {
+        $branches = Branch::active()->get();
+        $bestMatch = null;
+        $highestSimilarity = 0;
+
+        foreach ($branches as $branch) {
+            // Check similarity with branch location
+            $similarity = $this->calculateStringSimilarity($userLocation, $branch->location);
             
-            // Rizal Province
-            'Antipolo' => 'Rizal Province Branch',
-            'Antipolo City' => 'Rizal Province Branch',
-            'San Mateo' => 'Rizal Province Branch',
-            'Cainta' => 'Rizal Province Branch',
-            'Taytay' => 'Rizal Province Branch',
+            // Also check similarity with branch name (in case location contains branch area)
+            $nameSimilarity = $this->calculateStringSimilarity($userLocation, $branch->name);
             
-            // Cavite Province
-            'Bacoor' => 'Cavite Branch',
-            'Bacoor City' => 'Cavite Branch',
-            'Imus' => 'Cavite Branch',
-            'Imus City' => 'Cavite Branch',
-            'Dasmariñas' => 'Cavite Branch',
-            'Dasmariñas City' => 'Cavite Branch',
+            $maxSimilarity = max($similarity, $nameSimilarity);
             
-            // Laguna Province
-            'Santa Rosa' => 'Laguna Branch',
-            'Santa Rosa City' => 'Laguna Branch',
-            'Biñan' => 'Laguna Branch',
-            'Biñan City' => 'Laguna Branch',
-            'San Pedro' => 'Laguna Branch',
-            'San Pedro City' => 'Laguna Branch',
-            
-            // Bulacan Province
-            'Malolos' => 'Bulacan Branch',
-            'Malolos City' => 'Bulacan Branch',
-            'Meycauayan' => 'Bulacan Branch',
-            'Meycauayan City' => 'Bulacan Branch',
-            'San Jose del Monte' => 'Bulacan Branch',
-            'San Jose del Monte City' => 'Bulacan Branch',
-        ];
+            if ($maxSimilarity > $highestSimilarity && $maxSimilarity > 0.6) { // 60% similarity threshold
+                $highestSimilarity = $maxSimilarity;
+                $bestMatch = $branch;
+            }
+        }
+
+        if ($bestMatch) {
+            Log::info("Found branch '{$bestMatch->name}' with {$highestSimilarity}% similarity to location '{$userLocation}'");
+        }
+
+        return $bestMatch;
+    }
+
+    /**
+     * Calculate string similarity percentage
+     */
+    private function calculateStringSimilarity($str1, $str2)
+    {
+        $str1 = strtolower(trim($str1));
+        $str2 = strtolower(trim($str2));
+        
+        // Use Levenshtein distance for similarity
+        $maxLen = max(strlen($str1), strlen($str2));
+        if ($maxLen == 0) return 1.0;
+        
+        $distance = levenshtein($str1, $str2);
+        return (1 - $distance / $maxLen);
+    }
+
+    /**
+     * Calculate distance between two coordinates using Haversine formula
+     */
+    private function calculateDistance($lat1, $lon1, $lat2, $lon2)
+    {
+        $earthRadius = 6371; // Earth's radius in kilometers
+
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+
+        $a = sin($dLat / 2) * sin($dLat / 2) +
+            cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+            sin($dLon / 2) * sin($dLon / 2);
+
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return $earthRadius * $c;
+    }
+
+    /**
+     * Check if coordinates are within Philippines bounds
+     */
+    private function isWithinPhilippines($latitude, $longitude)
+    {
+        // Philippines approximate bounds
+        $minLat = 4.5;   // Southernmost point
+        $maxLat = 21.0;  // Northernmost point
+        $minLng = 116.0; // Westernmost point
+        $maxLng = 127.0; // Easternmost point
+
+        return $latitude >= $minLat && $latitude <= $maxLat && 
+               $longitude >= $minLng && $longitude <= $maxLng;
+    }
+
+    /**
+     * Get distance between user and branch using Google Maps Distance Matrix API
+     * (Optional: for more accurate travel distance vs straight-line distance)
+     */
+    public function getTravelDistance($userLat, $userLng, $branchLat, $branchLng)
+    {
+        if (!$this->googleMapsApiKey) {
+            return null;
+        }
+
+        $cacheKey = 'distance_' . md5("{$userLat},{$userLng}_{$branchLat},{$branchLng}");
+        
+        return Cache::remember($cacheKey, 3600, function () use ($userLat, $userLng, $branchLat, $branchLng) {
+            try {
+                $response = Http::get('https://maps.googleapis.com/maps/api/distancematrix/json', [
+                    'origins' => "{$userLat},{$userLng}",
+                    'destinations' => "{$branchLat},{$branchLng}",
+                    'key' => $this->googleMapsApiKey,
+                    'units' => 'metric',
+                ]);
+
+                if ($response->successful()) {
+                    $data = $response->json();
+                    
+                    if ($data['status'] === 'OK' && 
+                        !empty($data['rows'][0]['elements'][0]) && 
+                        $data['rows'][0]['elements'][0]['status'] === 'OK') {
+                        
+                        $element = $data['rows'][0]['elements'][0];
+                        return [
+                            'distance' => $element['distance']['value'] / 1000, // Convert to km
+                            'duration' => $element['duration']['text'],
+                        ];
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error("Error getting travel distance: " . $e->getMessage());
+            }
+
+            return null;
+        });
     }
 }

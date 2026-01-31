@@ -40,4 +40,8 @@ return [
         'model' => env('OPENAI_MODEL', 'gpt-3.5-turbo'),
     ],
 
+    'google' => [
+        'maps_api_key' => env('GOOGLE_MAPS_API_KEY'),
+    ],
+
 ];

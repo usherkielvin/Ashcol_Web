@@ -115,12 +115,17 @@ class TicketController extends Controller
 
             // Assign branch based on user location
             $branchService = new BranchAssignmentService();
-            $branch = $branchService->getBranchForTicket($user);
-            if ($branch) {
-                $data['branch_id'] = $branch->id;
-                Log::info("Assigned branch {$branch->name} to ticket for user {$user->id}");
-            } else {
-                Log::warning("No branch could be assigned to ticket for user {$user->id}");
+            try {
+                $branch = $branchService->getBranchForTicket($user);
+                if ($branch) {
+                    $data['branch_id'] = $branch->id;
+                    Log::info("Assigned branch {$branch->name} to ticket for user {$user->id}");
+                } else {
+                    Log::warning("No branch could be assigned to ticket for user {$user->id}");
+                }
+            } catch (\Exception $e) {
+                Log::error("Error assigning branch to ticket for user {$user->id}: " . $e->getMessage());
+                // Continue without branch assignment - ticket can still be created
             }
 
             // Handle image upload
