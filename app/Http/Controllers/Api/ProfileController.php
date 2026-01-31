@@ -184,112 +184,68 @@ class ProfileController extends Controller
      */
     public function getEmployees(Request $request)
     {
-        $user = $request->user();
+        try {
+            $user = $request->user();
 
-        \Log::info('getEmployees called', ['user_id' => $user->id ?? 'null', 'user_role' => $user->role ?? 'null', 'user_branch' => $user->branch ?? 'null']);
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated',
+                ], 401);
+            }
 
-        if (!$user) {
-            \Log::error('getEmployees: User not authenticated');
-            return response()->json([
-                'success' => false,
-                'message' => 'User not authenticated',
-            ], 401);
-        }
+            // Check if user is a manager
+            if ($user->role !== 'manager') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only managers can view employees.',
+                ], 403);
+            }
 
-        // Check if user is a manager
-        if ($user->role !== 'manager') {
-            \Log::error('getEmployees: Access denied', ['user_role' => $user->role]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Access denied. Only managers can view employees.',
-            ], 403);
-        }
+            // Get manager's branch directly from database
+            $managerBranch = DB::table('users')->where('id', $user->id)->value('branch');
+            
+            if (!$managerBranch) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Manager has no branch assigned.',
+                ], 400);
+            }
 
-        // Get manager's branch
-        $managerBranch = $user->branch;
-        
-        if (!$managerBranch) {
-            \Log::error('getEmployees: Manager has no branch assigned');
-            return response()->json([
-                'success' => false,
-                'message' => 'Manager has no branch assigned.',
-            ], 400);
-        }
+            // Get employees with the same branch name
+            $employees = DB::table('users')
+                ->whereIn('role', ['employee', 'staff'])
+                ->where('branch', $managerBranch)
+                ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
+                ->get();
 
-        \Log::info('getEmployees: Manager branch found', ['branch' => $managerBranch]);
+            // Format employee data
+            $formattedEmployees = [];
+            foreach ($employees as $employee) {
+                $formattedEmployees[] = [
+                    'id' => $employee->id,
+                    'username' => $employee->username,
+                    'firstName' => $employee->firstName,
+                    'lastName' => $employee->lastName,
+                    'email' => $employee->email,
+                    'role' => $employee->role,
+                    'branch' => $employee->branch,
+                ];
+            }
 
-        // Cache key for this manager's employee data
-        $cacheKey = "manager_employees_{$user->id}_{$managerBranch}";
-        
-        // Try to get from cache first (cache for 5 minutes)
-        $cachedData = Cache::get($cacheKey);
-        if ($cachedData) {
-            \Log::info('getEmployees: Returning cached data', ['employee_count' => count($cachedData['employees'])]);
             return response()->json([
                 'success' => true,
-                'employees' => $cachedData['employees'],
-                'branch' => $cachedData['branch'],
-                'employee_count' => $cachedData['employee_count'],
-                'cached' => true,
+                'employees' => $formattedEmployees,
+                'branch' => $managerBranch,
+                'employee_count' => count($formattedEmployees),
             ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading employees: ' . $e->getMessage(),
+            ], 500);
         }
-
-        \Log::info('getEmployees: No cache, querying database');
-
-        // Simplified and optimized query - only get essential data
-        $employees = DB::table('users')
-            ->whereIn('role', ['employee', 'staff']) // Check both possible role names
-            ->where('branch', $managerBranch)
-            ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'created_at')
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        \Log::info('getEmployees: Database query completed', ['found_employees' => $employees->count(), 'manager_branch' => $managerBranch]);
-
-        // Log each employee found
-        foreach ($employees as $emp) {
-            \Log::info('Employee found', ['id' => $emp->id, 'username' => $emp->username, 'role' => $emp->role, 'branch' => $emp->branch ?? 'NULL']);
-        }
-
-        // Get employee count efficiently
-        $employeeCount = $employees->count();
-
-        // Simplified employee data formatting (remove expensive operations)
-        $formattedEmployees = $employees->map(function ($employee) {
-            $firstName = $employee->firstName ?? '';
-            $lastName = $employee->lastName ?? '';
-            $name = trim($firstName . ' ' . $lastName);
-
-            return [
-                'id' => $employee->id,
-                'username' => $employee->username,
-                'firstName' => $firstName,
-                'lastName' => $lastName,
-                'name' => $name,
-                'email' => $employee->email,
-                'role' => $employee->role, // Use actual role from database
-                'branch' => $managerBranch, // All employees in this response are from manager's branch
-                'created_at' => $employee->created_at,
-            ];
-        });
-
-        $responseData = [
-            'branch' => $managerBranch,
-            'employee_count' => $employeeCount,
-            'employees' => $formattedEmployees,
-        ];
-
-        // Cache the result for 5 minutes
-        Cache::put($cacheKey, $responseData, 300);
-
-        \Log::info('getEmployees: Returning response', ['employee_count' => $employeeCount]);
-
-        return response()->json([
-            'success' => true,
-            'employees' => $formattedEmployees,
-            'branch' => $managerBranch,
-            'employee_count' => $employeeCount,
-        ]);
     }
 
     /**
@@ -297,17 +253,8 @@ class ProfileController extends Controller
      */
     public static function clearEmployeeCache($branchName)
     {
-        // Clear cache for all managers in this branch
-        $managers = DB::table('users')
-            ->where('role', 'manager')
-            ->where('branch', $branchName)
-            ->select('id')
-            ->get();
-
-        foreach ($managers as $manager) {
-            $cacheKey = "manager_employees_{$manager->id}_{$branchName}";
-            Cache::forget($cacheKey);
-        }
+        // Simple implementation - no complex caching
+        return true;
     }
 
     /**
