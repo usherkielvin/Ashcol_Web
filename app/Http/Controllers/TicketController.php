@@ -28,11 +28,15 @@ class TicketController extends Controller
             // Customers see only their own tickets
             $query->where('customer_id', $user->id);
         } elseif ($user->isStaff()) {
-            // Staff see assigned tickets and all tickets
-            $query->where(function ($q) use ($user) {
-                $q->where('assigned_staff_id', $user->id)
-                  ->orWhereNull('assigned_staff_id');
-            });
+            // Staff see only tickets assigned to them
+            $query->where('assigned_staff_id', $user->id);
+        } elseif ($user->isManager()) {
+            // Managers see all tickets from their branch
+            if ($user->branch) {
+                $query->whereHas('branch', function ($q) use ($user) {
+                    $q->where('name', $user->branch);
+                });
+            }
         }
         // Admins see all tickets (no filter)
 

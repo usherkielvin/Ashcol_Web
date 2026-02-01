@@ -52,13 +52,17 @@ class TicketController extends Controller
         if ($user->isCustomer()) {
             Log::info('Filtering tickets for customer', ['customer_id' => $user->id]);
             $query->where('customer_id', $user->id);
-        } elseif ($user->isManager() || $user->isStaff()) {
-            // Managers and staff see tickets from their branch
+        } elseif ($user->isManager()) {
+            // Managers see tickets from their branch
             if ($user->branch) {
                 $query->whereHas('branch', function ($q) use ($user) {
                     $q->where('name', $user->branch);
                 });
             }
+        } elseif ($user->isStaff()) {
+            // Staff/Employees see only tickets assigned to them
+            Log::info('Filtering tickets for staff/employee', ['staff_id' => $user->id]);
+            $query->where('assigned_staff_id', $user->id);
         } elseif ($user->isAdmin()) {
             // Admins see all tickets
         }
@@ -412,7 +416,7 @@ class TicketController extends Controller
             ], 403);
         }
         
-        $query = Ticket::with(['status', 'customer', 'branch']);
+        $query = Ticket::with(['status', 'customer', 'branch', 'assignedStaff']);
         
         // Filter by assigned staff for employees
         if ($user->isStaff()) {
@@ -436,6 +440,7 @@ class TicketController extends Controller
                     'status' => $ticket->status->name ?? 'Unknown',
                     'status_color' => $ticket->status->color ?? '#gray',
                     'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
+                    'assigned_staff' => $ticket->assignedStaff ? $ticket->assignedStaff->firstName . ' ' . $ticket->assignedStaff->lastName : null,
                     'branch' => $ticket->branch->name ?? null,
                     'latitude' => $ticket->customer->latitude ?? 0,
                     'longitude' => $ticket->customer->longitude ?? 0,
