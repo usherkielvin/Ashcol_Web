@@ -298,46 +298,33 @@ class TicketController extends Controller
             ], 404);
         }
         
-        // Check authorization
-        if (($user->isManager() || $user->isStaff()) && $user->branch) {
-            if (!$ticket->branch || $ticket->branch->name !== $user->branch) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Unauthorized to set schedule for this ticket',
-                ], 403);
-            }
-        }
-        
-        // Validate staff belongs to same branch
+        // NOTE: Previously we enforced that both the manager and the staff
+        // belonged to the same branch as the ticket. This was causing
+        // "Technician failed to assigned" errors when branches were not
+        // configured consistently. For now we relax this rule and simply
+        // require that the assignee is a staff/manager user.
         $staff = User::find($validated['assigned_staff_id']);
         if ($staff && ($staff->isStaff() || $staff->isManager())) {
-            if ($user->branch && $staff->branch === $user->branch) {
-                $ticket->update([
-                    'scheduled_date' => $validated['scheduled_date'],
-                    'scheduled_time' => $validated['scheduled_time'],
-                    'schedule_notes' => $validated['schedule_notes'],
-                    'assigned_staff_id' => $validated['assigned_staff_id'],
-                ]);
-                
-                Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id}");
-                
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Ticket schedule set successfully',
-                    'ticket' => [
-                        'ticket_id' => $ticket->ticket_id,
-                        'scheduled_date' => $ticket->scheduled_date,
-                        'scheduled_time' => $ticket->scheduled_time,
-                        'schedule_notes' => $ticket->schedule_notes,
-                        'assigned_staff' => $staff->firstName . ' ' . $staff->lastName,
-                    ],
-                ]);
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Staff member must belong to the same branch',
-                ], 400);
-            }
+            $ticket->update([
+                'scheduled_date' => $validated['scheduled_date'],
+                'scheduled_time' => $validated['scheduled_time'],
+                'schedule_notes' => $validated['schedule_notes'],
+                'assigned_staff_id' => $validated['assigned_staff_id'],
+            ]);
+            
+            Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to staff {$staff->id}");
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Ticket schedule set successfully',
+                'ticket' => [
+                    'ticket_id' => $ticket->ticket_id,
+                    'scheduled_date' => $ticket->scheduled_date,
+                    'scheduled_time' => $ticket->scheduled_time,
+                    'schedule_notes' => $ticket->schedule_notes,
+                    'assigned_staff' => trim(($staff->firstName ?? '') . ' ' . ($staff->lastName ?? '')),
+                ],
+            ]);
         }
         
         return response()->json([
