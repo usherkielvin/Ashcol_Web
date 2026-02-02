@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Ticket;
 use App\Models\TicketStatus;
 use App\Models\User;
+use App\Models\Payment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class TicketController extends Controller
 {
@@ -766,6 +768,313 @@ class TicketController extends Controller
             'success' => true,
             'employees' => $employeeData,
             'branch' => $user->branch,
+        ]);
+    }
+
+    /**
+     * Complete work with payment (for technicians)
+     */
+    public function completeWorkWithPayment(Request $request, $ticketId)
+    {
+        $user = $request->user();
+        
+        // Only staff/technicians can complete work
+        $userRole = strtolower($user->role ?? '');
+        if (!in_array($userRole, ['staff', 'employee']) && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to complete work',
+            ], 403);
+        }
+        
+        $validated = $request->validate([
+            'payment_method' => 'required|string|in:cash,online',
+            'amount' => 'required|numeric|min:0',
+            'notes' => 'nullable|string|max:500',
+        ]);
+        
+        $ticket = Ticket::with(['customer', 'branch', 'status'])->where('ticket_id', $ticketId)->first();
+        
+        if (!$ticket) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Ticket not found',
+            ], 404);
+        }
+        
+        // Verify ticket is assigned to this technician
+        if ($ticket->assigned_staff_id != $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This ticket is not assigned to you',
+            ], 403);
+        }
+        
+        // Get completed status
+        $completedStatus = TicketStatus::where('name', 'Completed')->first();
+        if (!$completedStatus) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Completed status not found',
+            ], 500);
+        }
+        
+        // Use database transaction to ensure both ticket and payment are created together
+        DB::beginTransaction();
+        try {
+            // Update ticket status to completed
+            $ticket->update([
+                'status_id' => $completedStatus->id,
+            ]);
+            
+            // Find manager for this branch (if exists)
+            $manager = null;
+            if ($ticket->branch) {
+                $manager = User::where('role', 'manager')
+                    ->where('branch', $ticket->branch->name)
+                    ->first();
+            }
+            
+            // Create payment record
+            $payment = Payment::create([
+                'ticket_id' => $ticket->ticket_id,
+                'ticket_table_id' => $ticket->id,
+                'customer_id' => $ticket->customer_id,
+                'technician_id' => $user->id,
+                'manager_id' => $manager?->id,
+                'payment_method' => $validated['payment_method'],
+                'amount' => $validated['amount'],
+                'status' => $validated['payment_method'] === 'cash' ? 'collected' : 'pending', // Cash is collected immediately
+                'notes' => $validated['notes'] ?? null,
+                'collected_at' => $validated['payment_method'] === 'cash' ? now() : null,
+            ]);
+            
+            // Clear caches
+            Cache::forget("employee_tickets_{$user->id}");
+            if ($ticket->branch) {
+                self::clearManagerTicketsCache($ticket->branch->name);
+            }
+            
+            DB::commit();
+            
+            Log::info("Work completed with payment", [
+                'ticket_id' => $ticket->ticket_id,
+                'technician_id' => $user->id,
+                'payment_method' => $validated['payment_method'],
+                'amount' => $validated['amount'],
+                'payment_id' => $payment->id,
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Work completed successfully. Payment recorded.',
+                'ticket' => [
+                    'ticket_id' => $ticket->ticket_id,
+                    'status' => $completedStatus->name,
+                    'status_color' => $completedStatus->color,
+                ],
+                'payment' => [
+                    'id' => $payment->id,
+                    'payment_method' => $payment->payment_method,
+                    'amount' => $payment->amount,
+                    'status' => $payment->status,
+                    'collected_at' => $payment->collected_at?->format('Y-m-d H:i:s'),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Failed to complete work with payment", [
+                'ticket_id' => $ticketId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to complete work: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get payment history (for managers)
+     */
+    public function getPaymentHistory(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user->isManager() && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to view payment history',
+            ], 403);
+        }
+        
+        $query = Payment::with(['ticket.branch', 'customer', 'technician'])
+            ->orderBy('created_at', 'desc');
+        
+        // Filter by manager's branch if manager
+        if ($user->isManager() && $user->branch) {
+            // Get branch ID for this manager's branch
+            $branch = \App\Models\Branch::where('name', $user->branch)->first();
+            if ($branch) {
+                $query->whereHas('ticket', function ($q) use ($branch) {
+                    $q->where('branch_id', $branch->id);
+                });
+            }
+        }
+        
+        $payments = $query->get();
+        
+        return response()->json([
+            'success' => true,
+            'payments' => $payments->map(function ($payment) {
+                return [
+                    'id' => $payment->id,
+                    'ticket_id' => $payment->ticket_id,
+                    'customer_name' => $payment->customer ? ($payment->customer->firstName . ' ' . $payment->customer->lastName) : 'Unknown',
+                    'technician_name' => $payment->technician ? ($payment->technician->firstName . ' ' . $payment->technician->lastName) : 'Unknown',
+                    'payment_method' => $payment->payment_method,
+                    'amount' => $payment->amount,
+                    'status' => $payment->status,
+                    'notes' => $payment->notes,
+                    'collected_at' => $payment->collected_at?->format('Y-m-d H:i:s'),
+                    'submitted_at' => $payment->submitted_at?->format('Y-m-d H:i:s'),
+                    'completed_at' => $payment->completed_at?->format('Y-m-d H:i:s'),
+                    'created_at' => $payment->created_at->format('Y-m-d H:i:s'),
+                ];
+            }),
+        ]);
+    }
+
+    /**
+     * Submit payment to manager (technician gives money to manager)
+     */
+    public function submitPaymentToManager(Request $request, $paymentId)
+    {
+        $user = $request->user();
+        
+        // Only staff/technicians can submit payments
+        $userRole = strtolower($user->role ?? '');
+        if (!in_array($userRole, ['staff', 'employee']) && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to submit payment',
+            ], 403);
+        }
+        
+        $payment = Payment::find($paymentId);
+        
+        if (!$payment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment not found',
+            ], 404);
+        }
+        
+        // Verify payment belongs to this technician
+        if ($payment->technician_id != $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This payment does not belong to you',
+            ], 403);
+        }
+        
+        // Only cash payments can be submitted
+        if ($payment->payment_method !== 'cash') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only cash payments can be submitted to manager',
+            ], 400);
+        }
+        
+        // Find manager for this branch
+        $manager = null;
+        if ($payment->ticket && $payment->ticket->branch) {
+            $manager = User::where('role', 'manager')
+                ->where('branch', $payment->ticket->branch->name)
+                ->first();
+        }
+        
+        if (!$manager) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Manager not found for this branch',
+            ], 404);
+        }
+        
+        $payment->update([
+            'manager_id' => $manager->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+        
+        Log::info("Payment submitted to manager", [
+            'payment_id' => $payment->id,
+            'technician_id' => $user->id,
+            'manager_id' => $manager->id,
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment submitted to manager successfully',
+            'payment' => [
+                'id' => $payment->id,
+                'status' => $payment->status,
+                'submitted_at' => $payment->submitted_at->format('Y-m-d H:i:s'),
+            ],
+        ]);
+    }
+
+    /**
+     * Complete payment (manager confirms receipt)
+     */
+    public function completePayment(Request $request, $paymentId)
+    {
+        $user = $request->user();
+        
+        if (!$user->isManager() && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to complete payment',
+            ], 403);
+        }
+        
+        $payment = Payment::find($paymentId);
+        
+        if (!$payment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment not found',
+            ], 404);
+        }
+        
+        // Verify payment is submitted to this manager
+        if ($payment->manager_id != $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This payment is not submitted to you',
+            ], 403);
+        }
+        
+        $payment->update([
+            'status' => 'completed',
+            'completed_at' => now(),
+        ]);
+        
+        Log::info("Payment completed by manager", [
+            'payment_id' => $payment->id,
+            'manager_id' => $user->id,
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment completed successfully',
+            'payment' => [
+                'id' => $payment->id,
+                'status' => $payment->status,
+                'completed_at' => $payment->completed_at->format('Y-m-d H:i:s'),
+            ],
         ]);
     }
 }

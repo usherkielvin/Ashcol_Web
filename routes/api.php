@@ -52,6 +52,12 @@ Route::prefix('v1')->group(function () {
         
         // Schedule management routes
         Route::put('/tickets/{ticketId}/schedule', [TicketController::class, 'setSchedule']);
+        
+        // Payment routes
+        Route::post('/tickets/{ticketId}/complete-work', [TicketController::class, 'completeWorkWithPayment']);
+        Route::get('/manager/payments', [TicketController::class, 'getPaymentHistory']);
+        Route::post('/payments/{paymentId}/submit', [TicketController::class, 'submitPaymentToManager']);
+        Route::post('/payments/{paymentId}/complete', [TicketController::class, 'completePayment']);
     });
 });
 
