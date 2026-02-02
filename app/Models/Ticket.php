@@ -23,6 +23,7 @@ class Ticket extends Model
         'address',
         'contact',
         'service_type',
+        'preferred_date',
         'image_path',
         'scheduled_date',
         'scheduled_time',
@@ -32,8 +33,6 @@ class Ticket extends Model
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'scheduled_date' => 'date',
-        'scheduled_time' => 'string',
     ];
 
     /**

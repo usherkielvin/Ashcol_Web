@@ -101,21 +101,38 @@ class TicketController extends Controller
         $isApi = $request->is('api/*') || $request->expectsJson();
 
         if ($isApi) {
-            // API validation for service tickets
+            // API validation for service tickets (from Android app)
             $validated = $request->validate([
+                'title' => 'nullable|string|max:255',
                 'description' => 'required|string|max:5000',
                 'address' => 'required|string|max:255',
                 'contact' => 'required|string|max:255',
                 'service_type' => 'required|string|max:255',
+                'preferred_date' => 'nullable|string|date',
+                'priority' => 'nullable|string|in:low,medium,high,urgent',
                 'image' => 'nullable|image|mimes:jpg,png,jpeg,gif|max:2048', // 2MB max
             ]);
 
             $data = $validated;
+            unset($data['image']); // Don't pass uploaded file to create
+            $data['preferred_date'] = !empty($validated['preferred_date']) ? $validated['preferred_date'] : null;
+            $data['priority'] = $validated['priority'] ?? Ticket::PRIORITY_MEDIUM;
             $data['customer_id'] = $user->id;
-            $data['status_id'] = TicketStatus::getDefault()->id;
-            $data['priority'] = Ticket::PRIORITY_MEDIUM; // Default priority
-            $data['title'] = 'Service Request'; // Default title
-            $data['ticket_id'] = Ticket::generateTicketId(); // Generate unique ticket ID
+            $defaultStatus = TicketStatus::getDefault();
+            $data['status_id'] = $defaultStatus ? $defaultStatus->id : TicketStatus::first()?->id;
+            if (!$data['status_id']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No ticket status configured. Please run database migrations and seeders.',
+                ], 500);
+            }
+            $data['title'] = $validated['title'] ?? ($validated['service_type'] . ' Request');
+            $data['ticket_id'] = Ticket::generateTicketId();
+
+            // Update user location from ticket address for branch assignment (if user has none)
+            if (!$user->location && !empty($validated['address'])) {
+                $user->update(['location' => $validated['address']]);
+            }
 
             // Assign branch based on user location
             $branchService = new BranchAssignmentService();
@@ -129,7 +146,6 @@ class TicketController extends Controller
                 }
             } catch (\Exception $e) {
                 Log::error("Error assigning branch to ticket for user {$user->id}: " . $e->getMessage());
-                // Continue without branch assignment - ticket can still be created
             }
 
             // Handle image upload
@@ -146,11 +162,19 @@ class TicketController extends Controller
 
             $ticket = Ticket::create($data);
 
+            $ticket->load(['customer', 'status', 'branch']);
+
+            // Clear manager tickets cache so branch manager sees new ticket immediately
+            if ($ticket->branch) {
+                \App\Http\Controllers\Api\TicketController::clearManagerTicketsCache($ticket->branch->name);
+            }
+
             return response()->json([
+                'success' => true,
                 'message' => 'Ticket created successfully.',
-                'ticket' => $ticket->load(['customer', 'status', 'branch']),
+                'ticket' => $ticket,
                 'ticket_id' => $ticket->ticket_id,
-                'status' => 'Pending', // Default status for new tickets
+                'status' => $ticket->status?->name ?? 'Pending',
             ], 201);
         } else {
             // Web form validation
@@ -196,6 +220,11 @@ class TicketController extends Controller
             }
 
             $ticket = Ticket::create($data);
+
+            // Clear manager tickets cache so branch manager sees new ticket immediately
+            if ($ticket->branch) {
+                \App\Http\Controllers\Api\TicketController::clearManagerTicketsCache($ticket->branch->name);
+            }
 
             return redirect()->route('tickets.show', $ticket)
                 ->with('success', 'Ticket created successfully.');
