@@ -576,6 +576,29 @@ class AuthController extends Controller
             if (isset($input['passwordConfirmation']) && !isset($input['password_confirmation'])) {
                 $input['password_confirmation'] = $input['passwordConfirmation'];
             }
+
+            // Normalize email (trim + lowercase) and perform an explicit uniqueness check
+            if (isset($input['email'])) {
+                $normalizedEmail = strtolower(trim($input['email']));
+                $input['email'] = $normalizedEmail;
+
+                // If a user with this email already exists in the CURRENT DB, block registration
+                $existingUser = User::whereRaw('LOWER(email) = ?', [$normalizedEmail])->first();
+                if ($existingUser) {
+                    \Log::warning('Registration blocked - email already used (explicit check)', [
+                        'email' => $normalizedEmail,
+                        'user_id' => $existingUser->id,
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Registration failed',
+                        'errors' => [
+                            'email' => ['This email is already registered. Please log in instead.'],
+                        ],
+                    ], 422);
+                }
+            }
             
             // Log incoming request data for debugging (excluding passwords)
             \Log::info('Registration request received', [
@@ -588,14 +611,14 @@ class AuthController extends Controller
                 'username' => 'required|string|max:255|unique:users',
                 'firstName' => 'required|string|max:255',
                 'lastName' => 'required|string|max:255',
-                'email' => 'required|string|email|max:255|unique:users',
+                // Email uniqueness is enforced by the explicit check above to avoid phantom duplicates
+                'email' => 'required|string|email|max:255',
                 'password' => 'required|string|min:8|confirmed',
                 'password_confirmation' => 'required|string|min:8',
                 'role' => 'required|string|in:customer,employee,manager,admin',
                 'location' => 'nullable|string|max:255',
                 'branch' => 'nullable|string|max:255',
             ], [
-                'email.unique' => 'Email already used',
                 'email.required' => 'Email is required',
                 'email.email' => 'Please enter a valid email address',
                 'username.unique' => 'Username already taken',
