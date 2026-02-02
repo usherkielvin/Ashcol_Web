@@ -23,12 +23,14 @@ class Ticket extends Model
         'address',
         'contact',
         'service_type',
+        'preferred_date',
         'image_path',
     ];
 
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'preferred_date' => 'date',
     ];
 
     /**
