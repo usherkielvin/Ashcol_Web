@@ -35,6 +35,8 @@ class Ticket extends Model
         'updated_at' => 'datetime',
         // Ensure preferred_date is always treated as a date (Carbon) so format() calls are safe
         'preferred_date' => 'date',
+        // Ensure scheduled_date is a date (Carbon) so format() calls in API controllers are safe
+        'scheduled_date' => 'date',
     ];
 
     /**
