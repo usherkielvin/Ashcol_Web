@@ -107,7 +107,7 @@ class BranchAssignmentService
         
         return Cache::remember($cacheKey, 86400, function () use ($address) {
             try {
-                $response = Http::get('https://maps.googleapis.com/maps/api/geocode/json', [
+                $response = Http::timeout(5)->get('https://maps.googleapis.com/maps/api/geocode/json', [
                     'address' => $address . ', Philippines', // Ensure we're searching within Philippines
                     'key' => $this->googleMapsApiKey,
                     'region' => 'ph', // Bias results to Philippines

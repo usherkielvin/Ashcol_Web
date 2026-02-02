@@ -3,10 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateTicketRequest;
+use App\Models\Branch;
 use App\Models\Ticket;
 use App\Models\TicketStatus;
 use App\Models\User;
-use App\Services\BranchAssignmentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -134,18 +134,13 @@ class TicketController extends Controller
                 $user->update(['location' => $validated['address']]);
             }
 
-            // Assign branch based on user location
-            $branchService = new BranchAssignmentService();
-            try {
-                $branch = $branchService->getBranchForTicket($user);
-                if ($branch) {
-                    $data['branch_id'] = $branch->id;
-                    Log::info("Assigned branch {$branch->name} to ticket for user {$user->id}");
-                } else {
-                    Log::warning("No branch could be assigned to ticket for user {$user->id}");
-                }
-            } catch (\Exception $e) {
-                Log::error("Error assigning branch to ticket for user {$user->id}: " . $e->getMessage());
+            // Assign branch - use fast path: existing user branch or default (skip slow geocoding during creation)
+            $branch = $user->branch
+                ? Branch::where('name', $user->branch)->active()->first()
+                : Branch::active()->first();
+            if ($branch) {
+                $data['branch_id'] = $branch->id;
+                Log::info("Assigned branch {$branch->name} to ticket for user {$user->id}");
             }
 
             // Handle image upload
@@ -205,10 +200,11 @@ class TicketController extends Controller
             if ($user->isCustomer()) {
                 $data['customer_id'] = $user->id;
                 $data['status_id'] = TicketStatus::getDefault()->id;
-                
-                // Assign branch based on user location
-                $branchService = new BranchAssignmentService();
-                $branch = $branchService->getBranchForTicket($user);
+
+                // Assign branch - fast path: user's branch or default (skip slow geocoding)
+                $branch = $user->branch
+                    ? Branch::where('name', $user->branch)->active()->first()
+                    : Branch::active()->first();
                 if ($branch) {
                     $data['branch_id'] = $branch->id;
                 }
