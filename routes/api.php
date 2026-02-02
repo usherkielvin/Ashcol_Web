@@ -48,7 +48,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/employee/tickets', [TicketController::class, 'getEmployeeTickets']);
         Route::get('/employee/schedule', [TicketController::class, 'getEmployeeSchedule']);
         
-        Route::get('/employees', [TicketController::class, 'getEmployees']);
+        Route::get('/employees', [ProfileController::class, 'getEmployees']);
         
         // Schedule management routes
         Route::put('/tickets/{ticketId}/schedule', [TicketController::class, 'setSchedule']);
