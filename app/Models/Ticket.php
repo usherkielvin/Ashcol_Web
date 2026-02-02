@@ -33,6 +33,8 @@ class Ticket extends Model
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        // Ensure preferred_date is always treated as a date (Carbon) so format() calls are safe
+        'preferred_date' => 'date',
     ];
 
     /**
