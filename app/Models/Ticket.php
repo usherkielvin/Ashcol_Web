@@ -24,11 +24,16 @@ class Ticket extends Model
         'contact',
         'service_type',
         'image_path',
+        'scheduled_date',
+        'scheduled_time',
+        'schedule_notes',
     ];
 
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'scheduled_date' => 'date',
+        'scheduled_time' => 'string',
     ];
 
     /**

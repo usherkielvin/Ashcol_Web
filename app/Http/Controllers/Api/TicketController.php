@@ -259,7 +259,132 @@ class TicketController extends Controller
                 'status' => $status->name,
                 'status_color' => $status->color,
                 'assigned_staff' => $ticket->assignedStaff ? $ticket->assignedStaff->firstName . ' ' . $ticket->assignedStaff->lastName : null,
+                'scheduled_date' => $ticket->scheduled_date,
+                'scheduled_time' => $ticket->scheduled_time,
+                'schedule_notes' => $ticket->schedule_notes,
             ],
+        ]);
+    }
+    
+    /**
+     * Set schedule for a ticket
+     */
+    public function setSchedule(Request $request, $ticketId)
+    {
+        $user = $request->user();
+        
+        if (!$user->isManager() && !$user->isStaff() && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to set ticket schedule',
+            ], 403);
+        }
+        
+        $validated = $request->validate([
+            'scheduled_date' => 'required|date',
+            'scheduled_time' => 'required|date_format:H:i',
+            'schedule_notes' => 'nullable|string',
+            'assigned_staff_id' => 'required|exists:users,id',
+        ]);
+        
+        $ticket = Ticket::with(['branch'])->where('ticket_id', $ticketId)->first();
+        
+        if (!$ticket) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Ticket not found',
+            ], 404);
+        }
+        
+        // Check authorization
+        if (($user->isManager() || $user->isStaff()) && $user->branch) {
+            if (!$ticket->branch || $ticket->branch->name !== $user->branch) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to set schedule for this ticket',
+                ], 403);
+            }
+        }
+        
+        // Validate staff belongs to same branch
+        $staff = User::find($validated['assigned_staff_id']);
+        if ($staff && ($staff->isStaff() || $staff->isManager())) {
+            if ($user->branch && $staff->branch === $user->branch) {
+                $ticket->update([
+                    'scheduled_date' => $validated['scheduled_date'],
+                    'scheduled_time' => $validated['scheduled_time'],
+                    'schedule_notes' => $validated['schedule_notes'],
+                    'assigned_staff_id' => $validated['assigned_staff_id'],
+                ]);
+                
+                Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id}");
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Ticket schedule set successfully',
+                    'ticket' => [
+                        'ticket_id' => $ticket->ticket_id,
+                        'scheduled_date' => $ticket->scheduled_date,
+                        'scheduled_time' => $ticket->scheduled_time,
+                        'schedule_notes' => $ticket->schedule_notes,
+                        'assigned_staff' => $staff->firstName . ' ' . $staff->lastName,
+                    ],
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Staff member must belong to the same branch',
+                ], 400);
+            }
+        }
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid staff assignment',
+        ], 400);
+    }
+    
+    /**
+     * Get employee's scheduled tickets
+     */
+    public function getEmployeeSchedule(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user->isStaff() && !$user->isManager()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to view schedule',
+            ], 403);
+        }
+        
+        $tickets = Ticket::with(['customer', 'status', 'branch'])
+            ->where('assigned_staff_id', $user->id)
+            ->whereNotNull('scheduled_date')
+            ->whereNotNull('scheduled_time')
+            ->orderBy('scheduled_date')
+            ->orderBy('scheduled_time')
+            ->get();
+        
+        return response()->json([
+            'success' => true,
+            'tickets' => $tickets->map(function ($ticket) {
+                return [
+                    'ticket_id' => $ticket->ticket_id,
+                    'title' => $ticket->title,
+                    'description' => $ticket->description,
+                    'scheduled_date' => $ticket->scheduled_date,
+                    'scheduled_time' => $ticket->scheduled_time,
+                    'schedule_notes' => $ticket->schedule_notes,
+                    'status' => $ticket->status->name ?? 'Unknown',
+                    'status_color' => $ticket->status->color ?? '#gray',
+                    'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
+                    'address' => $ticket->address,
+                    'priority' => $ticket->priority,
+                    'service_type' => $ticket->service_type,
+                    'branch' => $ticket->branch->name ?? null,
+                ];
+            }),
         ]);
     }
     
