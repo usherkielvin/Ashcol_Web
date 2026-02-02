@@ -194,7 +194,7 @@ class TicketController extends Controller
             'assigned_staff_id' => 'nullable|exists:users,id',
         ]);
         
-        $ticket = Ticket::with(['branch'])->where('ticket_id', $ticketId)->first();
+        $ticket = Ticket::with(['branch', 'status'])->where('ticket_id', $ticketId)->first();
         
         if (!$ticket) {
             return response()->json([
@@ -305,14 +305,25 @@ class TicketController extends Controller
         // require that the assignee is a staff/manager user.
         $staff = User::find($validated['assigned_staff_id']);
         if ($staff && ($staff->isStaff() || $staff->isManager())) {
-            $ticket->update([
+            // When a technician is assigned, move ticket out of Pending into an ongoing state.
+            // We use the existing "In Progress" status from TicketStatusSeeder.
+            $inProgressStatus = TicketStatus::where('name', 'In Progress')->first();
+
+            $updateData = [
                 'scheduled_date' => $validated['scheduled_date'],
                 'scheduled_time' => $validated['scheduled_time'],
                 'schedule_notes' => $validated['schedule_notes'],
                 'assigned_staff_id' => $validated['assigned_staff_id'],
-            ]);
+            ];
+
+            if ($inProgressStatus) {
+                $updateData['status_id'] = $inProgressStatus->id;
+            }
+
+            $ticket->update($updateData);
+            $ticket->refresh(); // Reload relations/status
             
-            Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to staff {$staff->id}");
+            Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to staff {$staff->id} (status set to In Progress)");
             
             return response()->json([
                 'success' => true,
@@ -323,6 +334,7 @@ class TicketController extends Controller
                     'scheduled_time' => $ticket->scheduled_time,
                     'schedule_notes' => $ticket->schedule_notes,
                     'assigned_staff' => trim(($staff->firstName ?? '') . ' ' . ($staff->lastName ?? '')),
+                    'status' => $ticket->status->name ?? 'In Progress',
                 ],
             ]);
         }
