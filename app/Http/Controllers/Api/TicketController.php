@@ -184,7 +184,14 @@ class TicketController extends Controller
     {
         $user = $request->user();
         
-        if (!$user->isManager() && !$user->isStaff() && !$user->isAdmin()) {
+        // Allow managers, staff, admins, and technicians (employee role)
+        $userRole = strtolower($user->role ?? '');
+        if (
+            !$user->isManager() &&
+            !$user->isStaff() &&
+            !$user->isAdmin() &&
+            $userRole !== 'employee'
+        ) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized to update ticket status',
@@ -205,7 +212,17 @@ class TicketController extends Controller
             ], 404);
         }
         
-        // Check if user can manage this ticket (same branch)
+        // Extra safety: technicians can only update tickets assigned to them
+        if ($userRole === 'employee') {
+            if ((int) $ticket->assigned_staff_id !== (int) $user->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This ticket is not assigned to you',
+                ], 403);
+            }
+        }
+        
+        // Check if user can manage this ticket (same branch) for managers/staff
         if (($user->isManager() || $user->isStaff()) && $user->branch) {
             if (!$ticket->branch || $ticket->branch->name !== $user->branch) {
                 return response()->json([
