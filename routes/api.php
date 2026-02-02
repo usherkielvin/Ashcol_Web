@@ -46,8 +46,12 @@ Route::prefix('v1')->group(function () {
         
         // Employee-specific routes
         Route::get('/employee/tickets', [TicketController::class, 'getEmployeeTickets']);
+        Route::get('/employee/schedule', [TicketController::class, 'getEmployeeSchedule']);
         
         Route::get('/employees', [TicketController::class, 'getEmployees']);
+        
+        // Schedule management routes
+        Route::put('/tickets/{ticketId}/schedule', [TicketController::class, 'setSchedule']);
     });
 });
 

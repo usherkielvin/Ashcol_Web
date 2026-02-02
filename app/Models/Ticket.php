@@ -25,12 +25,14 @@ class Ticket extends Model
         'service_type',
         'preferred_date',
         'image_path',
+        'scheduled_date',
+        'scheduled_time',
+        'schedule_notes',
     ];
 
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'preferred_date' => 'date',
     ];
 
     /**
