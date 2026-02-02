@@ -587,12 +587,27 @@ class TicketController extends Controller
     {
         $user = $request->user();
         
-        if (!$user->isStaff() && !$user->isAdmin()) {
+        // Check if user is staff, employee, or admin (more flexible role checking)
+        $userRole = strtolower($user->role ?? '');
+        $isValidRole = in_array($userRole, ['staff', 'employee']) || $user->isAdmin();
+        
+        if (!$isValidRole) {
+            Log::warning("Unauthorized employee tickets access attempt", [
+                'user_id' => $user->id,
+                'user_role' => $user->role,
+                'user_email' => $user->email
+            ]);
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized to view employee tickets',
+                'message' => 'Unauthorized to view employee tickets. Your role: ' . ($user->role ?? 'unknown'),
             ], 403);
         }
+        
+        Log::info("Employee tickets request", [
+            'user_id' => $user->id,
+            'user_role' => $user->role,
+            'user_email' => $user->email
+        ]);
         
         // Cache key for employee tickets
         $cacheKey = "employee_tickets_{$user->id}";
@@ -600,6 +615,10 @@ class TicketController extends Controller
         // Try cache first (2 minutes)
         $cachedData = Cache::get($cacheKey);
         if ($cachedData) {
+            Log::info("Returning cached employee tickets", [
+                'user_id' => $user->id,
+                'ticket_count' => count($cachedData)
+            ]);
             return response()->json([
                 'success' => true,
                 'tickets' => $cachedData,
@@ -610,9 +629,39 @@ class TicketController extends Controller
         $query = Ticket::with(['status', 'customer', 'branch', 'assignedStaff']);
         
         // Filter by assigned staff for employees - only show tickets assigned to this employee
-        if ($user->isStaff()) {
+        // Always filter by assigned_staff_id for non-admin users
+        if (!$user->isAdmin()) {
             $query->where('assigned_staff_id', $user->id);
         }
+        
+        // Support status filtering via query parameter
+        $statusFilter = $request->query('status');
+        if ($statusFilter) {
+            $statusFilter = strtolower($statusFilter);
+            // Map common status names
+            $statusMap = [
+                'pending' => ['pending', 'open'],
+                'in_progress' => ['in progress', 'accepted'],
+                'completed' => ['completed', 'resolved', 'closed'],
+            ];
+            
+            if (isset($statusMap[$statusFilter])) {
+                $query->whereHas('status', function ($q) use ($statusMap, $statusFilter) {
+                    $q->whereIn('name', $statusMap[$statusFilter]);
+                });
+            } else {
+                // Direct status name match
+                $query->whereHas('status', function ($q) use ($statusFilter) {
+                    $q->whereRaw('LOWER(name) = ?', [$statusFilter]);
+                });
+            }
+        }
+        
+        Log::info("Querying employee tickets", [
+            'user_id' => $user->id,
+            'assigned_staff_id_filter' => $user->id,
+            'status_filter' => $statusFilter ?? 'all'
+        ]);
         
         // Order by scheduled date first (if scheduled), then by creation date
         $tickets = $query->orderByRaw('CASE WHEN scheduled_date IS NOT NULL THEN 0 ELSE 1 END')
@@ -621,24 +670,37 @@ class TicketController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
         
+        Log::info("Found employee tickets", [
+            'user_id' => $user->id,
+            'ticket_count' => $tickets->count(),
+            'ticket_ids' => $tickets->pluck('ticket_id')->toArray()
+        ]);
+        
         $ticketData = $tickets->map(function ($ticket) {
+            $customerName = 'Unknown';
+            if ($ticket->customer) {
+                $firstName = $ticket->customer->firstName ?? '';
+                $lastName = $ticket->customer->lastName ?? '';
+                $customerName = trim($firstName . ' ' . $lastName) ?: 'Unknown';
+            }
+            
             return [
                 'id' => $ticket->id,
                 'ticket_id' => $ticket->ticket_id,
-                'title' => $ticket->title,
-                'description' => $ticket->description,
-                'service_type' => $ticket->service_type,
-                'address' => $ticket->address,
-                'contact' => $ticket->contact,
+                'title' => $ticket->title ?? '',
+                'description' => $ticket->description ?? '',
+                'service_type' => $ticket->service_type ?? '',
+                'address' => $ticket->address ?? '',
+                'contact' => $ticket->contact ?? '',
                 'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
                 'scheduled_date' => $ticket->scheduled_date?->format('Y-m-d'),
                 'scheduled_time' => $ticket->scheduled_time,
                 'schedule_notes' => $ticket->schedule_notes,
-                'priority' => $ticket->priority,
+                'priority' => $ticket->priority ?? 'medium',
                 'status' => $ticket->status->name ?? 'Unknown',
                 'status_color' => $ticket->status->color ?? '#gray',
-                'customer_name' => $ticket->customer ? ($ticket->customer->firstName . ' ' . $ticket->customer->lastName) : 'Unknown',
-                'assigned_staff' => $ticket->assignedStaff ? $ticket->assignedStaff->firstName . ' ' . $ticket->assignedStaff->lastName : null,
+                'customer_name' => $customerName,
+                'assigned_staff' => $ticket->assignedStaff ? trim(($ticket->assignedStaff->firstName ?? '') . ' ' . ($ticket->assignedStaff->lastName ?? '')) : null,
                 'branch' => $ticket->branch->name ?? null,
                 'latitude' => $ticket->customer->latitude ?? 0,
                 'longitude' => $ticket->customer->longitude ?? 0,
@@ -649,6 +711,11 @@ class TicketController extends Controller
         
         // Cache for 2 minutes
         Cache::put($cacheKey, $ticketData, 120);
+        
+        Log::info("Employee tickets response prepared", [
+            'user_id' => $user->id,
+            'ticket_count' => count($ticketData)
+        ]);
         
         return response()->json([
             'success' => true,
