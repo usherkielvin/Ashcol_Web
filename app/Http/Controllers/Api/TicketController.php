@@ -628,15 +628,40 @@ class TicketController extends Controller
             'user_email' => $user->email
         ]);
         
-        // Cache key for employee tickets
-        $cacheKey = "employee_tickets_{$user->id}";
+        // Support status filtering via query parameter
+        $statusFilter = $request->query('status');
+        if ($statusFilter) {
+            $statusFilter = strtolower($statusFilter);
+            // Map common status names
+            $statusMap = [
+                'pending' => ['pending', 'open'],
+                // Treat "in progress", "accepted", and "ongoing" as the same bucket
+                'in_progress' => ['in progress', 'accepted', 'ongoing'],
+                'completed' => ['completed', 'resolved', 'closed'],
+            ];
+            
+            if (isset($statusMap[$statusFilter])) {
+                $query->whereHas('status', function ($q) use ($statusMap, $statusFilter) {
+                    $q->whereIn('name', $statusMap[$statusFilter]);
+                });
+            } else {
+                // Direct status name match
+                $query->whereHas('status', function ($q) use ($statusFilter) {
+                    $q->whereRaw('LOWER(name) = ?', [$statusFilter]);
+                });
+            }
+        }
+        
+        // Cache key for employee tickets MUST include status so filters work correctly
+        $cacheKey = "employee_tickets_{$user->id}_" . ($statusFilter ?: 'all');
         
         // Try cache first (2 minutes)
         $cachedData = Cache::get($cacheKey);
         if ($cachedData) {
             Log::info("Returning cached employee tickets", [
                 'user_id' => $user->id,
-                'ticket_count' => count($cachedData)
+                'ticket_count' => count($cachedData),
+                'status_filter' => $statusFilter ?: 'all',
             ]);
             return response()->json([
                 'success' => true,
@@ -651,29 +676,6 @@ class TicketController extends Controller
         // Always filter by assigned_staff_id for non-admin users
         if (!$user->isAdmin()) {
             $query->where('assigned_staff_id', $user->id);
-        }
-        
-        // Support status filtering via query parameter
-        $statusFilter = $request->query('status');
-        if ($statusFilter) {
-            $statusFilter = strtolower($statusFilter);
-            // Map common status names
-            $statusMap = [
-                'pending' => ['pending', 'open'],
-                'in_progress' => ['in progress', 'accepted'],
-                'completed' => ['completed', 'resolved', 'closed'],
-            ];
-            
-            if (isset($statusMap[$statusFilter])) {
-                $query->whereHas('status', function ($q) use ($statusMap, $statusFilter) {
-                    $q->whereIn('name', $statusMap[$statusFilter]);
-                });
-            } else {
-                // Direct status name match
-                $query->whereHas('status', function ($q) use ($statusFilter) {
-                    $q->whereRaw('LOWER(name) = ?', [$statusFilter]);
-                });
-            }
         }
         
         Log::info("Querying employee tickets", [
@@ -728,7 +730,7 @@ class TicketController extends Controller
             ];
         });
         
-        // Cache for 2 minutes
+        // Cache for 2 minutes, per-user and per-status
         Cache::put($cacheKey, $ticketData, 120);
         
         Log::info("Employee tickets response prepared", [
