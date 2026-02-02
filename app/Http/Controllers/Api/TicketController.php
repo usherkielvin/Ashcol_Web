@@ -298,51 +298,94 @@ class TicketController extends Controller
             ], 404);
         }
         
-        // NOTE: Previously we enforced that both the manager and the staff
-        // belonged to the same branch as the ticket. This was causing
-        // "Technician failed to assigned" errors when branches were not
-        // configured consistently. For now we relax this rule and simply
-        // require that the assignee is a staff/manager user.
+        // Find the staff member to assign
         $staff = User::find($validated['assigned_staff_id']);
-        if ($staff && ($staff->isStaff() || $staff->isManager())) {
-            // When a technician is assigned, move ticket out of Pending into an ongoing state.
-            // We use the existing "In Progress" status from TicketStatusSeeder.
-            $inProgressStatus = TicketStatus::where('name', 'In Progress')->first();
+        
+        if (!$staff) {
+            Log::error("Assignment failed: Staff user not found", ['staff_id' => $validated['assigned_staff_id']]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Staff member not found',
+            ], 404);
+        }
+        
+        // Check if user has valid role (staff or manager)
+        $staffRole = strtolower($staff->role ?? '');
+        $isValidRole = in_array($staffRole, ['staff', 'employee', 'manager']);
+        
+        if (!$isValidRole) {
+            Log::error("Assignment failed: Invalid role", [
+                'staff_id' => $staff->id,
+                'staff_role' => $staff->role,
+                'staff_email' => $staff->email
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Selected user is not a valid technician. Role: ' . ($staff->role ?? 'unknown'),
+            ], 400);
+        }
+        
+        // When a technician is assigned, move ticket out of Pending into an ongoing state.
+        // We use the existing "In Progress" status from TicketStatusSeeder.
+        $inProgressStatus = TicketStatus::where('name', 'In Progress')->first();
 
-            $updateData = [
-                'scheduled_date' => $validated['scheduled_date'],
-                'scheduled_time' => $validated['scheduled_time'],
-                'schedule_notes' => $validated['schedule_notes'],
-                'assigned_staff_id' => $validated['assigned_staff_id'],
-            ];
+        $updateData = [
+            'scheduled_date' => $validated['scheduled_date'],
+            'scheduled_time' => $validated['scheduled_time'],
+            'schedule_notes' => $validated['schedule_notes'],
+            'assigned_staff_id' => $validated['assigned_staff_id'],
+        ];
 
-            if ($inProgressStatus) {
-                $updateData['status_id'] = $inProgressStatus->id;
-            }
+        if ($inProgressStatus) {
+            $updateData['status_id'] = $inProgressStatus->id;
+        }
 
+        try {
             $ticket->update($updateData);
             $ticket->refresh(); // Reload relations/status
             
-            Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to staff {$staff->id} (status set to In Progress)");
+            // Clear manager cache for this branch
+            if ($ticket->branch) {
+                self::clearManagerTicketsCache($ticket->branch->name);
+            }
+            
+            // Clear employee cache for the assigned staff member
+            Cache::forget("employee_tickets_{$staff->id}");
+            
+            Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to staff {$staff->id} (status set to In Progress)", [
+                'ticket_id' => $ticket->ticket_id,
+                'assigned_staff_id' => $staff->id,
+                'assigned_staff_name' => trim(($staff->firstName ?? '') . ' ' . ($staff->lastName ?? '')),
+                'scheduled_date' => $validated['scheduled_date'],
+                'scheduled_time' => $validated['scheduled_time'],
+            ]);
             
             return response()->json([
                 'success' => true,
-                'message' => 'Ticket schedule set successfully',
+                'message' => 'Ticket assigned and scheduled successfully',
                 'ticket' => [
                     'ticket_id' => $ticket->ticket_id,
                     'scheduled_date' => $ticket->scheduled_date,
                     'scheduled_time' => $ticket->scheduled_time,
                     'schedule_notes' => $ticket->schedule_notes,
                     'assigned_staff' => trim(($staff->firstName ?? '') . ' ' . ($staff->lastName ?? '')),
+                    'assigned_staff_id' => $staff->id,
                     'status' => $ticket->status->name ?? 'In Progress',
                 ],
             ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to assign ticket", [
+                'ticket_id' => $ticket->ticket_id,
+                'staff_id' => $staff->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to assign ticket: ' . $e->getMessage(),
+            ], 500);
         }
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Invalid staff assignment',
-        ], 400);
     }
     
     /**
@@ -429,15 +472,16 @@ class TicketController extends Controller
         // Cache key for manager tickets
         $cacheKey = "manager_tickets_{$user->id}_{$user->branch}";
         
-        // Try to get from cache first (cache for 2 minutes for tickets)
+        // Try to get from cache first (cache for 3 minutes for tickets)
         $cachedData = Cache::get($cacheKey);
         if ($cachedData) {
-            \Log::info('Returning cached data');
+            \Log::info('Returning cached data', ['count' => count($cachedData)]);
+            $endTime = microtime(true);
             return response()->json([
                 'success' => true,
                 'tickets' => $cachedData,
                 'cached' => true,
-            ]);
+            ])->header('X-Response-Time', round(($endTime - $startTime) * 1000, 2) . 'ms');
         }
         
         \Log::info('No cache found, querying database');
@@ -457,8 +501,15 @@ class TicketController extends Controller
         }
         
         $queryStart = microtime(true);
-        // Simplified query - remove some eager loading to speed up
-        $query = Ticket::with(['status', 'customer']);
+        // Optimized query - select only needed columns and minimal eager loading
+        $query = Ticket::select([
+            'id', 'ticket_id', 'title', 'description', 'service_type', 
+            'address', 'contact', 'preferred_date', 'priority', 
+            'status_id', 'customer_id', 'branch_id', 'created_at', 'updated_at'
+        ])->with([
+            'status:id,name,color', // Only load status id, name, color
+            'customer:id,firstName,lastName' // Only load customer id and name fields
+        ]);
         
         // Filter by branch_id directly (much faster than whereHas)
         if ($managerBranchId) {
@@ -500,8 +551,8 @@ class TicketController extends Controller
         $mapEnd = microtime(true);
         \Log::info('Data mapping completed', ['time' => ($mapEnd - $mapStart) * 1000 . 'ms']);
         
-        // Cache the result for 2 minutes
-        Cache::put($cacheKey, $ticketData, 120);
+        // Cache the result for 3 minutes (increased from 2 for better performance)
+        Cache::put($cacheKey, $ticketData, 180);
         
         $endTime = microtime(true);
         \Log::info('Manager tickets request completed', ['total_time' => ($endTime - $startTime) * 1000 . 'ms']);
@@ -543,39 +594,65 @@ class TicketController extends Controller
             ], 403);
         }
         
+        // Cache key for employee tickets
+        $cacheKey = "employee_tickets_{$user->id}";
+        
+        // Try cache first (2 minutes)
+        $cachedData = Cache::get($cacheKey);
+        if ($cachedData) {
+            return response()->json([
+                'success' => true,
+                'tickets' => $cachedData,
+                'cached' => true,
+            ]);
+        }
+        
         $query = Ticket::with(['status', 'customer', 'branch', 'assignedStaff']);
         
-        // Filter by assigned staff for employees
+        // Filter by assigned staff for employees - only show tickets assigned to this employee
         if ($user->isStaff()) {
             $query->where('assigned_staff_id', $user->id);
         }
         
-        $tickets = $query->orderBy('created_at', 'desc')->get();
+        // Order by scheduled date first (if scheduled), then by creation date
+        $tickets = $query->orderByRaw('CASE WHEN scheduled_date IS NOT NULL THEN 0 ELSE 1 END')
+            ->orderBy('scheduled_date', 'asc')
+            ->orderBy('scheduled_time', 'asc')
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        $ticketData = $tickets->map(function ($ticket) {
+            return [
+                'id' => $ticket->id,
+                'ticket_id' => $ticket->ticket_id,
+                'title' => $ticket->title,
+                'description' => $ticket->description,
+                'service_type' => $ticket->service_type,
+                'address' => $ticket->address,
+                'contact' => $ticket->contact,
+                'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
+                'scheduled_date' => $ticket->scheduled_date?->format('Y-m-d'),
+                'scheduled_time' => $ticket->scheduled_time,
+                'schedule_notes' => $ticket->schedule_notes,
+                'priority' => $ticket->priority,
+                'status' => $ticket->status->name ?? 'Unknown',
+                'status_color' => $ticket->status->color ?? '#gray',
+                'customer_name' => $ticket->customer ? ($ticket->customer->firstName . ' ' . $ticket->customer->lastName) : 'Unknown',
+                'assigned_staff' => $ticket->assignedStaff ? $ticket->assignedStaff->firstName . ' ' . $ticket->assignedStaff->lastName : null,
+                'branch' => $ticket->branch->name ?? null,
+                'latitude' => $ticket->customer->latitude ?? 0,
+                'longitude' => $ticket->customer->longitude ?? 0,
+                'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
+                'updated_at' => $ticket->updated_at->format('Y-m-d H:i:s'),
+            ];
+        });
+        
+        // Cache for 2 minutes
+        Cache::put($cacheKey, $ticketData, 120);
         
         return response()->json([
             'success' => true,
-            'tickets' => $tickets->map(function ($ticket) {
-                return [
-                    'id' => $ticket->id,
-                    'ticket_id' => $ticket->ticket_id,
-                    'title' => $ticket->title,
-                    'description' => $ticket->description,
-                    'service_type' => $ticket->service_type,
-                    'address' => $ticket->address,
-                    'contact' => $ticket->contact,
-                    'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
-                    'priority' => $ticket->priority,
-                    'status' => $ticket->status->name ?? 'Unknown',
-                    'status_color' => $ticket->status->color ?? '#gray',
-                    'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
-                    'assigned_staff' => $ticket->assignedStaff ? $ticket->assignedStaff->firstName . ' ' . $ticket->assignedStaff->lastName : null,
-                    'branch' => $ticket->branch->name ?? null,
-                    'latitude' => $ticket->customer->latitude ?? 0,
-                    'longitude' => $ticket->customer->longitude ?? 0,
-                    'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
-                    'updated_at' => $ticket->updated_at->format('Y-m-d H:i:s'),
-                ];
-            }),
+            'tickets' => $ticketData,
         ]);
     }
 
@@ -604,18 +681,24 @@ class TicketController extends Controller
         
         $employees = $query->get();
         
+        $employeeData = $employees->map(function ($employee) {
+            return [
+                'id' => $employee->id,
+                'firstName' => $employee->firstName,
+                'lastName' => $employee->lastName,
+                'email' => $employee->email,
+                'role' => $employee->role,
+                'branch' => $employee->branch,
+            ];
+        });
+        
+        // Cache employees for 5 minutes
+        Cache::put($employeeCacheKey, $employeeData, 300);
+        
         return response()->json([
             'success' => true,
-            'employees' => $employees->map(function ($employee) {
-                return [
-                    'id' => $employee->id,
-                    'firstName' => $employee->firstName,
-                    'lastName' => $employee->lastName,
-                    'email' => $employee->email,
-                    'role' => $employee->role,
-                    'branch' => $employee->branch,
-                ];
-            }),
+            'employees' => $employeeData,
+            'branch' => $user->branch,
         ]);
     }
 }
