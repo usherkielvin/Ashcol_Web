@@ -55,6 +55,69 @@ class AuthController extends Controller
     }
 
     /**
+     * Guess nearest branch based on region & city for PH (NCR, Central Luzon, CALABARZON)
+     */
+    private function guessBranchFromRegionCity(?string $region, ?string $city): ?string
+    {
+        $region = strtolower(trim($region ?? ''));
+        $city   = strtolower(trim($city ?? ''));
+
+        // NCR branches
+        if (str_contains($region, 'ncr') || str_contains($region, 'national capital')) {
+            if (str_contains($city, 'valenzuela')) {
+                return 'ASHCOL Valenzuela';
+            }
+            if (str_contains($city, 'taguig') || str_contains($city, 'bgc')) {
+                return 'ASHCOL TAGUIG';
+            }
+            if (str_contains($city, 'rodriguez') || str_contains($city, 'montalban')) {
+                return 'ASHCOL Rodriguez Rizal';
+            }
+        }
+
+        // Central Luzon branches (Pampanga, Bulacan, etc.)
+        if (str_contains($region, 'central luzon') || str_contains($city, 'pampanga') || str_contains($city, 'bulacan')) {
+            if (str_contains($city, 'san fernando') || str_contains($city, 'pampanga')) {
+                return 'ASHCOL PAMPANGA';
+            }
+            if (str_contains($city, 'malolos') || str_contains($city, 'bulacan')) {
+                return 'ASHCOL Bulacan';
+            }
+        }
+
+        // CALABARZON branches (Cavite, Laguna, Batangas, Rizal)
+        if (
+            str_contains($region, 'calabarzon') ||
+            str_contains($city, 'cavite') ||
+            str_contains($city, 'laguna') ||
+            str_contains($city, 'batangas') ||
+            str_contains($city, 'rizal')
+        ) {
+            if (str_contains($city, 'general trias')) {
+                return 'ASHCOL GENTRI CAVITE';
+            }
+            if (str_contains($city, 'dasmariñas') || str_contains($city, 'dasmarinas')) {
+                return 'ASHCOL DASMARINAS CAVITE';
+            }
+            if (str_contains($city, 'santa rosa') || str_contains($city, 'sta rosa')) {
+                return 'ASHCOL STA ROSA – TAGAYTAY RD';
+            }
+            if (str_contains($city, 'santa cruz') || str_contains($city, 'sta cruz')) {
+                return 'ASHCOL LAGUNA';
+            }
+            if (str_contains($city, 'batangas')) {
+                return 'ASHCOL BATANGAS';
+            }
+            if (str_contains($city, 'rodriguez') || str_contains($city, 'montalban') || str_contains($city, 'rizal')) {
+                return 'ASHCOL Rodriguez Rizal';
+            }
+        }
+
+        // Fallback: no automatic branch
+        return null;
+    }
+
+    /**
      * Handle login request
      * Supports both email and username login
      */
@@ -578,6 +641,19 @@ class AuthController extends Controller
                 $input['password_confirmation'] = $input['passwordConfirmation'];
             }
 
+            // If old 'location' is provided and region/city are missing, try to split it
+            if (!isset($input['region']) && !isset($input['city']) && isset($input['location']) && is_string($input['location'])) {
+                $parts = array_map('trim', explode(',', $input['location'], 2));
+                if (count($parts) === 2) {
+                    [$maybeRegion, $maybeCity] = $parts;
+                    $input['region'] = $maybeRegion;
+                    $input['city']   = $maybeCity;
+                } else {
+                    // If only one part, treat it as city
+                    $input['city'] = $parts[0];
+                }
+            }
+
             // Normalize email (trim + lowercase) and perform an explicit uniqueness check
             if (isset($input['email'])) {
                 $normalizedEmail = strtolower(trim($input['email']));
@@ -619,6 +695,8 @@ class AuthController extends Controller
                 'role' => 'required|string|in:customer,employee,manager,admin',
                 'region' => 'nullable|string|max:255',
                 'city' => 'nullable|string|max:255',
+                // Accept legacy location field but it is optional and mainly for backward compatibility
+                'location' => 'nullable|string|max:255',
                 'branch' => 'nullable|string|max:255',
             ], [
                 'email.required' => 'Email is required',
@@ -649,6 +727,9 @@ class AuthController extends Controller
                 ], 422);
             }
 
+            // Guess branch from region/city for auto-branching (only if branch not explicitly provided)
+            $guessedBranch = $this->guessBranchFromRegionCity($input['region'] ?? null, $input['city'] ?? null);
+
             // Generate verification code
             $verificationCode = EmailVerification::generateCode();
             
@@ -672,7 +753,7 @@ class AuthController extends Controller
                 'role' => $input['role'],
                 'region' => $input['region'] ?? null,
                 'city' => $input['city'] ?? null,
-                'branch' => $input['branch'] ?? null,
+                'branch' => $input['branch'] ?? $guessedBranch,
             ]);
 
             // Send verification code email asynchronously (non-blocking)
