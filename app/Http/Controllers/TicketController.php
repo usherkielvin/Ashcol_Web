@@ -118,8 +118,17 @@ class TicketController extends Controller
             $data['preferred_date'] = !empty($validated['preferred_date']) ? $validated['preferred_date'] : null;
             $data['priority'] = $validated['priority'] ?? Ticket::PRIORITY_MEDIUM;
             $data['customer_id'] = $user->id;
-            $defaultStatus = TicketStatus::getDefault();
-            $data['status_id'] = $defaultStatus ? $defaultStatus->id : TicketStatus::first()?->id;
+
+            // Always try to start customer tickets in a clear "Pending" state so
+            // the customer Pending filter and manager review flow behave predictably.
+            $pendingStatus = TicketStatus::where('name', 'Pending')->first();
+            if ($pendingStatus) {
+                $data['status_id'] = $pendingStatus->id;
+            } else {
+                $defaultStatus = TicketStatus::getDefault();
+                $data['status_id'] = $defaultStatus ? $defaultStatus->id : TicketStatus::first()?->id;
+            }
+
             if (!$data['status_id']) {
                 return response()->json([
                     'success' => false,
