@@ -111,4 +111,74 @@ class Branch extends Model
             ->where('location', 'LIKE', '%' . $locationName . '%')
             ->first();
     }
+
+    /**
+     * Guess branch from region and city
+     * Centralized logic used by AuthController and TicketController
+     */
+    public static function guessFromRegionCity(?string $region, ?string $city): ?string
+    {
+        // 1. Try DB lookup by exact location match
+        if ($city) {
+            $branch = self::findByLocation($city);
+            if ($branch) return $branch->name;
+        }
+
+        $region = mb_strtolower(trim($region ?? ''), 'UTF-8');
+        $city   = mb_strtolower(trim($city ?? ''), 'UTF-8');
+
+        // NCR branches
+        if (str_contains($region, 'ncr') || str_contains($region, 'national capital')) {
+            if (str_contains($city, 'valenzuela')) {
+                return 'ASHCOL Valenzuela';
+            }
+            if (str_contains($city, 'taguig') || str_contains($city, 'bgc')) {
+                return 'ASHCOL TAGUIG';
+            }
+            if (str_contains($city, 'rodriguez') || str_contains($city, 'montalban')) {
+                return 'ASHCOL Rodriguez Rizal';
+            }
+        }
+
+        // Central Luzon branches (Pampanga, Bulacan, etc.)
+        if (str_contains($region, 'central luzon') || str_contains($city, 'pampanga') || str_contains($city, 'bulacan')) {
+            if (str_contains($city, 'san fernando') || str_contains($city, 'pampanga')) {
+                return 'ASHCOL PAMPANGA';
+            }
+            if (str_contains($city, 'malolos') || str_contains($city, 'bulacan')) {
+                return 'ASHCOL Bulacan';
+            }
+        }
+
+        // CALABARZON branches (Cavite, Laguna, Batangas, Rizal)
+        if (
+            str_contains($region, 'calabarzon') ||
+            str_contains($city, 'cavite') ||
+            str_contains($city, 'laguna') ||
+            str_contains($city, 'batangas') ||
+            str_contains($city, 'rizal')
+        ) {
+            if (str_contains($city, 'general trias') || str_contains($city, 'gentri')) {
+                return 'ASHCOL GENTRI CAVITE';
+            }
+            if (str_contains($city, 'dasmariñas') || str_contains($city, 'dasmarinas') || str_contains($city, 'dasma')) {
+                return 'ASHCOL DASMARINAS CAVITE';
+            }
+            if (str_contains($city, 'santa rosa') || str_contains($city, 'sta rosa')) {
+                return 'ASHCOL STA ROSA – TAGAYTAY RD';
+            }
+            if (str_contains($city, 'santa cruz') || str_contains($city, 'sta cruz')) {
+                return 'ASHCOL LAGUNA';
+            }
+            if (str_contains($city, 'batangas')) {
+                return 'ASHCOL BATANGAS';
+            }
+            if (str_contains($city, 'rodriguez') || str_contains($city, 'montalban') || str_contains($city, 'rizal')) {
+                return 'ASHCOL Rodriguez Rizal';
+            }
+        }
+
+        // Fallback: no automatic branch
+        return null;
+    }
 }

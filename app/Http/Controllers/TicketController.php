@@ -142,11 +142,37 @@ class TicketController extends Controller
             if (!$user->location && !empty($validated['address'])) {
                 $user->update(['location' => $validated['address']]);
             }
+            
+            // Branch Assignment Logic
+            $branchName = $user->branch;
+            
+            // If user has no branch, try to guess it from their profile or the ticket address
+            if (empty($branchName)) {
+                 // Try user's city/region first
+                 $branchName = \App\Models\Branch::guessFromRegionCity($user->region, $user->city);
+                 
+                 // If failed, try parsing the ticket address
+                 if (empty($branchName) && !empty($validated['address'])) {
+                     $branchName = \App\Models\Branch::guessFromRegionCity(null, $validated['address']);
+                 }
+                 
+                 // If we successfully guessed a branch, update the user's profile
+                 if ($branchName) {
+                     $user->update(['branch' => $branchName]);
+                 }
+            }
 
-            // Assign branch - use fast path: existing user branch or default (skip slow geocoding during creation)
-            $branch = $user->branch
-                ? Branch::where('name', $user->branch)->active()->first()
-                : Branch::active()->first();
+            // Assign branch - use matching branch or default to active
+            $branch = $branchName
+                ? Branch::where('name', $branchName)->active()->first()
+                : null;
+            
+            // Fallback to first active branch only if absolutely necessary (logging it)
+            if (!$branch) {
+                $branch = Branch::active()->first();
+                Log::warning("Ticket {$data['ticket_id']} assigned to default branch {$branch?->name} because no matching branch found for user {$user->id}");
+            }
+
             if ($branch) {
                 $data['branch_id'] = $branch->id;
                 Log::info("Assigned branch {$branch->name} to ticket for user {$user->id}");
@@ -210,10 +236,19 @@ class TicketController extends Controller
                 $data['customer_id'] = $user->id;
                 $data['status_id'] = TicketStatus::getDefault()->id;
 
-                // Assign branch - fast path: user's branch or default (skip slow geocoding)
-                $branch = $user->branch
-                    ? Branch::where('name', $user->branch)->active()->first()
+                // Branch Assignment Logic for Web Customer
+                $branchName = $user->branch;
+                if (empty($branchName)) {
+                     $branchName = \App\Models\Branch::guessFromRegionCity($user->region, $user->city);
+                     if ($branchName) {
+                         $user->update(['branch' => $branchName]);
+                     }
+                }
+
+                $branch = $branchName
+                    ? Branch::where('name', $branchName)->active()->first()
                     : Branch::active()->first();
+                
                 if ($branch) {
                     $data['branch_id'] = $branch->id;
                 }
