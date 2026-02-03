@@ -199,7 +199,7 @@ class TicketController extends Controller
         }
         
         $validated = $request->validate([
-            'status' => 'required|string|in:pending,accepted,in_progress,completed,cancelled',
+            'status' => 'required|string|in:open,pending,accepted,in_progress,completed,cancelled,resolved,closed',
             'assigned_staff_id' => 'nullable|exists:users,id',
         ]);
         
@@ -234,11 +234,14 @@ class TicketController extends Controller
         
         // Find status by name
         $statusMap = [
+            'open' => 'Open',
             'pending' => 'Pending',
             'accepted' => 'Accepted',
             'in_progress' => 'In Progress',
             'completed' => 'Completed',
             'cancelled' => 'Cancelled',
+            'resolved' => 'Resolved',
+            'closed' => 'Closed',
         ];
         
         $statusName = $statusMap[$validated['status']] ?? 'Pending';

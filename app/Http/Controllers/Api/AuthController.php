@@ -51,9 +51,13 @@ class AuthController extends Controller
             'role' => $user->role ?? 'customer',
             'region' => $user->region ?? null,
             'city' => $user->city ?? null,
+            'location' => $user->location ?? null, // Legacy
             'branch' => $user->branch ?? null,
             'profile_photo' => $profilePhotoUrl,
             'has_facebook_account' => $hasFacebookAccount,
+            'email_verified' => !is_null($user->email_verified_at),
+            'facebook_linked' => $hasFacebookAccount,
+            'google_linked' => !is_null($user->email_verified_at) && $user->password === null, // Rough heuristic
         ];
     }
 
@@ -62,8 +66,14 @@ class AuthController extends Controller
      */
     private function guessBranchFromRegionCity(?string $region, ?string $city): ?string
     {
-        $region = strtolower(trim($region ?? ''));
-        $city   = strtolower(trim($city ?? ''));
+        // 1. Try DB lookup by exact location match
+        if ($city) {
+            $branch = \App\Models\Branch::findByLocation($city);
+            if ($branch) return $branch->name;
+        }
+
+        $region = mb_strtolower(trim($region ?? ''), 'UTF-8');
+        $city   = mb_strtolower(trim($city ?? ''), 'UTF-8');
 
         // NCR branches
         if (str_contains($region, 'ncr') || str_contains($region, 'national capital')) {
@@ -96,10 +106,10 @@ class AuthController extends Controller
             str_contains($city, 'batangas') ||
             str_contains($city, 'rizal')
         ) {
-            if (str_contains($city, 'general trias')) {
+            if (str_contains($city, 'general trias') || str_contains($city, 'gentri')) {
                 return 'ASHCOL GENTRI CAVITE';
             }
-            if (str_contains($city, 'dasmariñas') || str_contains($city, 'dasmarinas')) {
+            if (str_contains($city, 'dasmariñas') || str_contains($city, 'dasmarinas') || str_contains($city, 'dasma')) {
                 return 'ASHCOL DASMARINAS CAVITE';
             }
             if (str_contains($city, 'santa rosa') || str_contains($city, 'sta rosa')) {
@@ -234,6 +244,30 @@ class AuthController extends Controller
             $firstName = $request->input('first_name', '');
             $lastName = $request->input('last_name', '');
             $phone = $request->input('phone', '');
+            
+            // Handle location inputs
+            $input = $request->all();
+            
+            // If old 'location' is provided and region/city are missing, try to split it
+            if (!isset($input['region']) && !isset($input['city']) && isset($input['location']) && is_string($input['location'])) {
+                $parts = array_map('trim', explode(',', $input['location'], 2));
+                if (count($parts) === 2) {
+                    [$maybeRegion, $maybeCity] = $parts;
+                    $input['region'] = $maybeRegion;
+                    $input['city']   = $maybeCity;
+                } else {
+                    $input['city'] = $parts[0];
+                }
+                \Log::info('Google Register: Location parsed', [
+                    'original' => $input['location'],
+                    'parsed_region' => $input['region'] ?? null,
+                    'parsed_city' => $input['city'] ?? null,
+                ]);
+            }
+
+            // Guess branch
+            $guessedBranch = $this->guessBranchFromRegionCity($input['region'] ?? null, $input['city'] ?? null);
+            \Log::info('Google Register: Branch guessed', ['branch' => $guessedBranch]);
 
             // Check if user already exists
             $existingUser = User::where('email', $email)->first();
@@ -266,6 +300,10 @@ class AuthController extends Controller
                 'role' => 'customer', // Default role
                 'phone' => $phone,
                 'email_verified_at' => now(), // Google emails are verified
+                'region' => $input['region'] ?? null,
+                'city' => $input['city'] ?? null,
+                'location' => $input['location'] ?? null,
+                'branch' => $guessedBranch,
             ]);
 
             $token = $user->createToken('mobile-app')->plainTextToken;
@@ -669,6 +707,11 @@ class AuthController extends Controller
                     // If only one part, treat it as city
                     $input['city'] = $parts[0];
                 }
+                \Log::info('Location parsed from single string', [
+                    'original' => $input['location'],
+                    'parsed_region' => $input['region'] ?? null,
+                    'parsed_city' => $input['city'] ?? null,
+                ]);
             }
 
             // Normalize email (trim + lowercase) and perform an explicit uniqueness check
@@ -745,7 +788,13 @@ class AuthController extends Controller
             }
 
             // Guess branch from region/city for auto-branching (only if branch not explicitly provided)
+            \Log::info('Branch guessing input', [
+                'region' => $input['region'] ?? null,
+                'city' => $input['city'] ?? null,
+                'location_raw' => $input['location'] ?? null,
+            ]);
             $guessedBranch = $this->guessBranchFromRegionCity($input['region'] ?? null, $input['city'] ?? null);
+            \Log::info('Branch guessing result', ['guessed_branch' => $guessedBranch]);
 
             // Generate verification code
             $verificationCode = EmailVerification::generateCode();
@@ -1221,4 +1270,6 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
+
 }
