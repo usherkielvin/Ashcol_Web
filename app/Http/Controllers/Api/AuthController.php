@@ -227,7 +227,7 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            $email = $request->email;
+            $email = strtolower(trim($request->email));
             $firstName = $request->input('first_name', '');
             $lastName = $request->input('last_name', '');
             $phone = $request->input('phone', '');
@@ -315,13 +315,24 @@ class AuthController extends Controller
 
             // Verify Google ID token (simplified - in production, verify with Google's API)
             // For now, we'll trust the token from the app and verify email matches
-            $email = $request->email;
+            $email = strtolower(trim($request->email));
+            
+            // DEBUG LOGGING
+            \Log::info('Google Sign-In Attempt:', [
+                'raw_email' => $request->email,
+                'normalized_email' => $email,
+                'all_inputs' => $request->all()
+            ]);
+
             $firstName = $request->input('first_name', '');
             $lastName = $request->input('last_name', '');
             $phone = $request->input('phone', '');
 
             // Check if user exists - ONLY allow login for existing users
-            $user = User::where('email', $email)->first();
+            // Use explicit LIKE check to handle collation issues if any
+            $user = User::where('email', $email)->orWhereRaw('LOWER(email) = ?', [$email])->first();
+            
+            \Log::info('Google Sign-In User Query Result:', ['found' => $user ? 'yes' : 'no', 'user_id' => $user ? $user->id : null]);
 
             if ($user) {
                 // User exists - log them in
@@ -336,6 +347,8 @@ class AuthController extends Controller
                 }
                 $user->email_verified_at = now(); // Google emails are verified
                 $user->save();
+
+                \Log::info('Google Sign-In Successful', ['user_id' => $user->id]);
 
                 return response()->json([
                     'success' => true,
@@ -754,6 +767,7 @@ class AuthController extends Controller
                 'region' => $input['region'] ?? null,
                 'city' => $input['city'] ?? null,
                 'branch' => $input['branch'] ?? $guessedBranch,
+                'phone' => $input['phone'] ?? null,
             ]);
 
             // Send verification code email asynchronously (non-blocking)
