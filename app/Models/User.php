@@ -132,19 +132,4 @@ class User extends Authenticatable
         return $this->hasMany(TicketComment::class);
     }
 
-    /**
-     * Get the Facebook account linked to this user.
-     */
-    public function facebookAccount(): HasOne
-    {
-        return $this->hasOne(FacebookAccount::class);
-    }
-
-    /**
-     * Check if user has a Facebook account linked.
-     */
-    public function hasFacebookAccount(): bool
-    {
-        return $this->facebookAccount !== null;
-    }
 }
