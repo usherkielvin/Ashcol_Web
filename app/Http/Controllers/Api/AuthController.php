@@ -43,6 +43,9 @@ class AuthController extends Controller
             'username' => $user->username ?? null,
             'firstName' => $user->firstName ?? null,
             'lastName' => $user->lastName ?? null,
+            // 'name' column removed, concatenating dynamically if needed,
+            // but 'name' key in JSON might be expected by frontend?
+            // Let's keep the key 'name' but generate it dynamically.
             'name' => trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? '')),
             'email' => $user->email ?? null,
             'role' => $user->role ?? 'customer',
@@ -342,9 +345,10 @@ class AuthController extends Controller
                 if ($firstName) $user->firstName = $firstName;
                 if ($lastName) $user->lastName = $lastName;
                 if ($phone) $user->phone = $phone;
-                if ($firstName || $lastName) {
-                    $user->name = trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
-                }
+                
+                // 'name' column was removed in cleanup migration, do not set it.
+                // $user->name = trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? ''));
+                
                 $user->email_verified_at = now(); // Google emails are verified
                 $user->save();
 
