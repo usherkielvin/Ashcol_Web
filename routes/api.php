@@ -12,7 +12,6 @@ Route::prefix('v1')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/google-signin', [AuthController::class, 'googleSignIn']);
     Route::post('/google-register', [AuthController::class, 'googleRegister']); // New Google registration endpoint
-    Route::post('/facebook-signin', [AuthController::class, 'facebookSignIn']);
     Route::post('/send-verification-code', [AuthController::class, 'sendVerificationCode']);
     Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
     Route::post('/request-password-reset', [AuthController::class, 'requestPasswordReset']);
@@ -31,6 +30,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/profile/photo', [ProfileController::class, 'updatePhoto']);
         Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto']);
         Route::post('/update-location', [ProfileController::class, 'updateLocation']);
+        Route::post('/register-fcm-token', [ProfileController::class, 'registerFCMToken']);
         
         // Ticket routes - using the API TicketController
         Route::get('/test', [TicketController::class, 'test']); // Test endpoint

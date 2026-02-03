@@ -374,6 +374,18 @@ class TicketController extends Controller
             // Clear employee cache for the assigned staff member
             Cache::forget("employee_tickets_{$staff->id}");
             
+            // Send Firebase push notification to assigned employee
+            try {
+                $firebaseService = new \App\Services\FirebaseService();
+                $firebaseService->notifyTicketAssigned($ticket->ticket_id, $staff, $user);
+            } catch (\Exception $e) {
+                // Log error but don't fail the assignment
+                Log::warning('Failed to send FCM notification for ticket assignment', [
+                    'ticket_id' => $ticket->ticket_id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+            
             Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to staff {$staff->id} (status set to In Progress)", [
                 'ticket_id' => $ticket->ticket_id,
                 'assigned_staff_id' => $staff->id,
