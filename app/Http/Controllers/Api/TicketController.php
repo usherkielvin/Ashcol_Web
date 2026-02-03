@@ -93,7 +93,7 @@ class TicketController extends Controller
                     'address' => $ticket->address,
                     'contact' => $ticket->contact,
                     'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
-                    'priority' => $ticket->priority,
+
                     'status' => $ticket->status->name ?? 'Unknown',
                     'status_color' => $ticket->status->color ?? '#gray',
                     'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
@@ -153,7 +153,7 @@ class TicketController extends Controller
                 'address' => $ticket->address,
                 'contact' => $ticket->contact,
                 'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
-                'priority' => $ticket->priority,
+
                 'status' => $ticket->status->name ?? 'Unknown',
                 'status_color' => $ticket->status->color ?? '#gray',
                 'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
@@ -446,7 +446,6 @@ class TicketController extends Controller
                     'status_color' => $ticket->status->color ?? '#gray',
                     'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
                     'address' => $ticket->address,
-                    'priority' => $ticket->priority,
                     'service_type' => $ticket->service_type,
                     'branch' => $ticket->branch->name ?? null,
                 ];
@@ -526,7 +525,7 @@ class TicketController extends Controller
         // Optimized query - select only needed columns and minimal eager loading
         $query = Ticket::select([
             'id', 'ticket_id', 'title', 'description', 'service_type', 
-            'address', 'contact', 'preferred_date', 'priority', 
+            'address', 'contact', 'preferred_date', 
             'status_id', 'customer_id', 'branch_id', 'created_at', 'updated_at'
         ])->with([
             'status:id,name,color', // Only load status id, name, color
@@ -560,7 +559,6 @@ class TicketController extends Controller
                 'address' => $ticket->address ?? '',
                 'contact' => $ticket->contact ?? '',
                 'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
-                'priority' => $ticket->priority ?? 'medium',
                 'status' => $ticket->status->name ?? 'Unknown',
                 'status_color' => $ticket->status->color ?? '#gray',
                 'customer_name' => $customerName,
@@ -718,9 +716,7 @@ class TicketController extends Controller
                 'contact' => $ticket->contact ?? '',
                 'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
                 'scheduled_date' => $ticket->scheduled_date?->format('Y-m-d'),
-                'scheduled_time' => $ticket->scheduled_time,
                 'schedule_notes' => $ticket->schedule_notes,
-                'priority' => $ticket->priority ?? 'medium',
                 'status' => $ticket->status->name ?? 'Unknown',
                 'status_color' => $ticket->status->color ?? '#gray',
                 'customer_name' => $customerName,

@@ -29,12 +29,8 @@ class UpdateTicketRequest extends FormRequest
             'description' => ['sometimes', 'required', 'string', 'max:5000'],
             'status_id' => ['sometimes', 'required', 'exists:ticket_statuses,id'],
             'assigned_staff_id' => ['nullable', 'exists:users,id'],
-            'priority' => ['sometimes', 'required', Rule::in([
-                Ticket::PRIORITY_LOW,
-                Ticket::PRIORITY_MEDIUM,
-                Ticket::PRIORITY_HIGH,
-                Ticket::PRIORITY_URGENT,
-            ])],
+
+
         ];
     }
 

@@ -37,19 +37,7 @@
                     </div>
                 </div>
 
-                <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg p-6">
-                    <div class="flex items-center">
-                        <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Urgent Tickets</p>
-                            <p class="text-3xl font-bold text-red-600 dark:text-red-400">{{ $stats['urgent'] }}</p>
-                        </div>
-                        <div class="text-red-600 dark:text-red-400">
-                            <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                            </svg>
-                        </div>
-                    </div>
-                </div>
+
             </div>
 
             <!-- Pending Updates -->
@@ -78,13 +66,7 @@
                                                     style="background-color: {{ $ticket->status->color }}20; color: {{ $ticket->status->color }}">
                                                     {{ $ticket->status->name }}
                                                 </span>
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                                                    @if($ticket->priority === 'urgent') bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200
-                                                    @elseif($ticket->priority === 'high') bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200
-                                                    @else bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
-                                                    @endif">
-                                                    {{ ucfirst($ticket->priority) }}
-                                                </span>
+
                                             </div>
                                         </div>
                                         <div class="ml-4 text-right text-sm text-gray-500 dark:text-gray-400">
@@ -117,7 +99,7 @@
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Title</th>
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Customer</th>
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Priority</th>
+
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Created</th>
                                     </tr>
                                 </thead>
@@ -136,11 +118,7 @@
                                                     {{ $ticket->status->name }}
                                                 </span>
                                             </td>
-                                            <td class="px-4 py-3">
-                                                <span class="text-xs font-medium text-gray-900 dark:text-gray-100">
-                                                    {{ ucfirst($ticket->priority) }}
-                                                </span>
-                                            </td>
+
                                             <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ $ticket->created_at->diffForHumans() }}</td>
                                         </tr>
                                     @endforeach
