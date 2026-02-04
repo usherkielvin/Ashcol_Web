@@ -1263,6 +1263,8 @@ class TicketController extends Controller
                     'status_color' => $ticket->status->color ?? '#gray',
                     'customer_name' => $customerName,
                     'service_type' => $ticket->service_type ?? '',
+                    'description' => $ticket->description ?? '',
+                    'address' => $ticket->address ?? '',
                     'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
                 ];
             });
