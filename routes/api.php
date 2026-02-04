@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ChatbotController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\TicketController;
+use App\Http\Controllers\Api\BranchController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -58,6 +59,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/manager/payments', [TicketController::class, 'getPaymentHistory']);
         Route::post('/payments/{paymentId}/submit', [TicketController::class, 'submitPaymentToManager']);
         Route::post('/payments/{paymentId}/complete', [TicketController::class, 'completePayment']);
+        
+        // Branch routes
+        Route::get('/branches', [BranchController::class, 'index']);
+        Route::post('/branches/sync-firestore', [BranchController::class, 'syncToFirestore']);
     });
 });
 
