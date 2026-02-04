@@ -22,7 +22,7 @@ class BranchSeeder extends Seeder
                 'is_active' => true,
             ],
             [
-                'name' => 'ASHCOL Valenzuela',
+                'name' => 'ASHCOL VALENZUELA',
                 'location' => 'Valenzuela City',
                 'address' => 'Valenzuela City, Metro Manila',
                 'latitude' => 14.7000,
@@ -30,7 +30,7 @@ class BranchSeeder extends Seeder
                 'is_active' => true,
             ],
             [
-                'name' => 'ASHCOL Rodriguez Rizal',
+                'name' => 'ASHCOL RODRIGUEZ RIZAL',
                 'location' => 'Rodriguez, Rizal',
                 'address' => 'Rodriguez, Rizal',
                 'latitude' => 14.7297,
@@ -46,7 +46,7 @@ class BranchSeeder extends Seeder
                 'is_active' => true,
             ],
             [
-                'name' => 'ASHCOL Bulacan',
+                'name' => 'ASHCOL BULACAN',
                 'location' => 'Malolos City, Bulacan',
                 'address' => 'Malolos City, Bulacan',
                 'latitude' => 14.8434,
@@ -93,10 +93,21 @@ class BranchSeeder extends Seeder
                 'longitude' => 121.0583,
                 'is_active' => true,
             ],
+            [
+                'name' => 'ASHCOL CANDELARIA QUEZON PROVINCE',
+                'location' => 'Candelaria, Quezon',
+                'address' => 'Candelaria, Quezon Province',
+                'latitude' => 13.9323,
+                'longitude' => 121.4234,
+                'is_active' => true,
+            ],
         ];
 
         foreach ($branches as $branch) {
-            Branch::create($branch);
+            Branch::updateOrCreate(
+                ['name' => $branch['name']], // Check if branch with this name exists
+                $branch // If not, create with these values; if yes, update
+            );
         }
     }
 }
