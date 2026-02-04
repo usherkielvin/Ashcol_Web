@@ -741,10 +741,11 @@ class TicketController extends Controller
         // Apply status filter if present
         if ($statusFilter) {
             $statusFilter = strtolower($statusFilter);
-             $statusMap = [
+            $statusMap = [
                 'pending' => ['Pending', 'pending', 'open', 'Open'],
                 'in_progress' => ['In Progress', 'in progress', 'accepted', 'Accepted', 'ongoing', 'Ongoing'],
                 'completed' => ['Completed', 'completed', 'resolved', 'Resolved', 'closed', 'Closed'],
+                'cancelled' => ['Cancelled', 'cancelled', 'Rejected', 'rejected', 'failed', 'Failed'],
             ];
             
             if (isset($statusMap[$statusFilter])) {
