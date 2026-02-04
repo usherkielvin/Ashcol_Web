@@ -709,16 +709,7 @@ class TicketController extends Controller
                 'completed' => ['Completed', 'completed', 'resolved', 'Resolved', 'closed', 'Closed'],
             ];
             
-            if (isset($statusMap[$statusFilter])) {
-                $query->whereHas('status', function ($q) use ($statusMap, $statusFilter) {
-                    $q->whereIn('name', $statusMap[$statusFilter]);
-                });
-            } else {
-                // Direct status name match
-                $query->whereHas('status', function ($q) use ($statusFilter) {
-                    $q->whereRaw('LOWER(name) = ?', [$statusFilter]);
-                });
-            }
+            // Filter application moved to after query initialization
         }
         
         // Cache key for employee tickets MUST include status so filters work correctly
@@ -745,6 +736,26 @@ class TicketController extends Controller
         // Always filter by assigned_staff_id for non-admin users
         if (!$user->isAdmin()) {
             $query->where('assigned_staff_id', $user->id);
+        }
+        
+        // Apply status filter if present
+        if ($statusFilter) {
+            $statusFilter = strtolower($statusFilter);
+             $statusMap = [
+                'pending' => ['Pending', 'pending', 'open', 'Open'],
+                'in_progress' => ['In Progress', 'in progress', 'accepted', 'Accepted', 'ongoing', 'Ongoing'],
+                'completed' => ['Completed', 'completed', 'resolved', 'Resolved', 'closed', 'Closed'],
+            ];
+            
+            if (isset($statusMap[$statusFilter])) {
+                $query->whereHas('status', function ($q) use ($statusMap, $statusFilter) {
+                    $q->whereIn('name', $statusMap[$statusFilter]);
+                });
+            } else {
+                 $query->whereHas('status', function ($q) use ($statusFilter) {
+                    $q->whereRaw('LOWER(name) = ?', [$statusFilter]);
+                });
+            }
         }
         
         Log::info("Querying employee tickets", [
