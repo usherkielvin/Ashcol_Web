@@ -20,6 +20,16 @@ class BranchController extends Controller
             return response()->json([
                 'success' => true,
                 'branches' => $branches->map(function ($branch) {
+                    // Get manager for this branch
+                    $manager = \App\Models\User::where('branch', $branch->name)
+                        ->where('role', \App\Models\User::ROLE_MANAGER)
+                        ->first();
+                    
+                    // Get employee count (staff/employee only, not including manager)
+                    $employeeCount = \App\Models\User::where('branch', $branch->name)
+                        ->whereIn('role', [\App\Models\User::ROLE_STAFF, 'employee'])
+                        ->count();
+                    
                     return [
                         'id' => $branch->id,
                         'name' => $branch->name,
@@ -28,8 +38,12 @@ class BranchController extends Controller
                         'latitude' => $branch->latitude,
                         'longitude' => $branch->longitude,
                         'isActive' => $branch->is_active,
+                        'manager' => $manager ? $manager->firstName . ' ' . $manager->lastName : null,
+                        'employee_count' => $employeeCount,
+                        'description' => $branch->location, // Using location as description for now
                     ];
                 }),
+                'total_branches' => $branches->count(),
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to fetch branches: ' . $e->getMessage());
