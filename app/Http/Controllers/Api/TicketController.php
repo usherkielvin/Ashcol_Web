@@ -703,10 +703,10 @@ class TicketController extends Controller
             $statusFilter = strtolower($statusFilter);
             // Map common status names
             $statusMap = [
-                'pending' => ['pending', 'open'],
+                'pending' => ['Pending', 'pending', 'open', 'Open'],
                 // Treat "in progress", "accepted", and "ongoing" as the same bucket
-                'in_progress' => ['in progress', 'accepted', 'ongoing'],
-                'completed' => ['completed', 'resolved', 'closed'],
+                'in_progress' => ['In Progress', 'in progress', 'accepted', 'Accepted', 'ongoing', 'Ongoing'],
+                'completed' => ['Completed', 'completed', 'resolved', 'Resolved', 'closed', 'Closed'],
             ];
             
             if (isset($statusMap[$statusFilter])) {
