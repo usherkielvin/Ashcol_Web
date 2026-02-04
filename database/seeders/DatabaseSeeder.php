@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
         // Seed ticket statuses first
         $this->call([
             TicketStatusSeeder::class,
+            BranchSeeder::class,
         ]);
 
         // Create admin user
