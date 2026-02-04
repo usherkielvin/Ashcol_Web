@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use App\Services\FirestoreService;
 
 class ProfileController extends Controller
 {
@@ -150,6 +151,29 @@ class ProfileController extends Controller
             // Update user profile_photo field
             $user->profile_photo = $path;
             $user->save();
+            
+            // clear cache
+            Cache::forget('user_' . $user->id);
+
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService();
+                $firestoreService->database()
+                    ->collection('users')
+                    ->document((string)$user->id)
+                    ->set([
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'branch' => $user->branch,
+                        'role' => $user->role,
+                        'profilePhoto' => asset('storage/' . $path),
+                        'updatedAt' => new \DateTime(),
+                    ], ['merge' => true]);
+            } catch (\Exception $e) {
+                // Log error but continue
+                \Illuminate\Support\Facades\Log::error('Firestore sync failed: ' . $e->getMessage());
+            }
 
             return response()->json([
                 'success' => true,

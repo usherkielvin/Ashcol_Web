@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use App\Services\FirestoreService;
 
 class TicketController extends Controller
 {
@@ -273,6 +274,34 @@ class TicketController extends Controller
         
         $ticket->update($updateData);
         
+        // Sync to Firestore
+        try {
+            $firestoreService = new FirestoreService(); 
+            // We need to fetch fresh ticket data with relations for sync
+            $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+            
+            $firestoreService->database()
+                ->collection('tickets')
+                ->document($syncedTicket->ticket_id)
+                ->set([
+                    'id' => $syncedTicket->id,
+                    'ticketId' => $syncedTicket->ticket_id,
+                    'customerId' => $syncedTicket->customer_id,
+                    'customerEmail' => $syncedTicket->customer->email ?? null,
+                    'assignedTo' => $syncedTicket->assigned_staff_id,
+                    'status' => $syncedTicket->status->name ?? 'Unknown',
+                    'statusColor' => $syncedTicket->status->color ?? '#gray',
+                    'serviceType' => $syncedTicket->service_type,
+                    'description' => $syncedTicket->description,
+                    'scheduledDate' => $syncedTicket->scheduled_date,
+                    'scheduledTime' => $syncedTicket->scheduled_time,
+                    'branch' => $syncedTicket->branch->name ?? null,
+                    'updatedAt' => new \DateTime(),
+                ], ['merge' => true]);
+        } catch (\Exception $e) {
+            Log::error('Firestore sync failed in updateStatus: ' . $e->getMessage());
+        }
+        
         Log::info("Ticket {$ticket->ticket_id} status updated to {$statusName} by user {$user->id}");
         
         return response()->json([
@@ -365,6 +394,33 @@ class TicketController extends Controller
         try {
             $ticket->update($updateData);
             $ticket->refresh(); // Reload relations/status
+            
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService(); 
+                $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+                
+                $firestoreService->database()
+                    ->collection('tickets')
+                    ->document($syncedTicket->ticket_id)
+                    ->set([
+                        'id' => $syncedTicket->id,
+                        'ticketId' => $syncedTicket->ticket_id,
+                        'customerId' => $syncedTicket->customer_id,
+                        'customerEmail' => $syncedTicket->customer->email ?? null,
+                        'assignedTo' => $syncedTicket->assigned_staff_id,
+                        'status' => $syncedTicket->status->name ?? 'Unknown',
+                        'statusColor' => $syncedTicket->status->color ?? '#gray',
+                        'serviceType' => $syncedTicket->service_type,
+                        'description' => $syncedTicket->description,
+                        'scheduledDate' => $syncedTicket->scheduled_date,
+                        'scheduledTime' => $syncedTicket->scheduled_time,
+                        'branch' => $syncedTicket->branch->name ?? null,
+                        'updatedAt' => new \DateTime(),
+                    ], ['merge' => true]);
+            } catch (\Exception $e) {
+                Log::error('Firestore sync failed in setSchedule: ' . $e->getMessage());
+            }
             
             // Clear manager cache for this branch
             if ($ticket->branch) {
