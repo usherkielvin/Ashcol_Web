@@ -40,13 +40,7 @@ class DashboardController extends Controller
         // Ticket statistics by status
         $ticketsByStatus = TicketStatus::withCount('tickets')->get();
         
-        // Priority breakdown
-        $priorityStats = [
-            'urgent' => Ticket::where('priority', Ticket::PRIORITY_URGENT)->count(),
-            'high' => Ticket::where('priority', Ticket::PRIORITY_HIGH)->count(),
-            'medium' => Ticket::where('priority', Ticket::PRIORITY_MEDIUM)->count(),
-            'low' => Ticket::where('priority', Ticket::PRIORITY_LOW)->count(),
-        ];
+
 
         // Unassigned tickets
         $unassignedTickets = Ticket::whereNull('assigned_staff_id')->count();
@@ -66,7 +60,7 @@ class DashboardController extends Controller
             'totalCustomers' => $totalCustomers,
             'totalStaff' => $totalStaff,
             'ticketsByStatus' => $ticketsByStatus,
-            'priorityStats' => $priorityStats,
+
             'unassignedTickets' => $unassignedTickets,
             'recentTickets' => $recentTickets,
             'recentUsers' => $recentUsers,
@@ -109,7 +103,7 @@ class DashboardController extends Controller
         $stats = [
             'total_assigned' => $assignedTickets->count(),
             'pending' => $pendingUpdates->count(),
-            'urgent' => $assignedTickets->where('priority', Ticket::PRIORITY_URGENT)->count(),
+
         ];
 
         return view('dashboard.staff', [

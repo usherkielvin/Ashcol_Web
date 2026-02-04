@@ -27,14 +27,7 @@
                                     style="background-color: {{ $ticket->status->color }}20; color: {{ $ticket->status->color }}">
                                     {{ $ticket->status->name }}
                                 </span>
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium 
-                                    @if($ticket->priority === 'urgent') bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200
-                                    @elseif($ticket->priority === 'high') bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200
-                                    @elseif($ticket->priority === 'medium') bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
-                                    @else bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300
-                                    @endif">
-                                    {{ ucfirst($ticket->priority) }} Priority
-                                </span>
+
                             </div>
                         </div>
                         <div class="text-right text-sm text-gray-500 dark:text-gray-400">

@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Log;
+use App\Services\FirestoreService;
 
 class TicketController extends Controller
 {
@@ -41,13 +42,9 @@ class TicketController extends Controller
         // Admins see all tickets (no filter)
 
         // Filter by status if provided
+        // Filter by status if provided
         if ($request->has('status_id') && $request->status_id) {
             $query->where('status_id', $request->status_id);
-        }
-
-        // Filter by priority if provided
-        if ($request->has('priority') && $request->priority) {
-            $query->where('priority', $request->priority);
         }
 
         // Search by title or description
@@ -65,12 +62,6 @@ class TicketController extends Controller
         return view('tickets.index', [
             'tickets' => $tickets,
             'statuses' => $statuses,
-            'priorities' => [
-                Ticket::PRIORITY_LOW => 'Low',
-                Ticket::PRIORITY_MEDIUM => 'Medium',
-                Ticket::PRIORITY_HIGH => 'High',
-                Ticket::PRIORITY_URGENT => 'Urgent',
-            ],
         ]);
     }
 
@@ -109,14 +100,13 @@ class TicketController extends Controller
                 'contact' => 'required|string|max:255',
                 'service_type' => 'required|string|max:255',
                 'preferred_date' => 'nullable|string|date',
-                'priority' => 'nullable|string|in:low,medium,high,urgent',
                 'image' => 'nullable|image|mimes:jpg,png,jpeg,gif|max:2048', // 2MB max
             ]);
 
             $data = $validated;
             unset($data['image']); // Don't pass uploaded file to create
             $data['preferred_date'] = !empty($validated['preferred_date']) ? $validated['preferred_date'] : null;
-            $data['priority'] = $validated['priority'] ?? Ticket::PRIORITY_MEDIUM;
+            $data['priority'] = Ticket::PRIORITY_MEDIUM; // Force default
             $data['customer_id'] = $user->id;
 
             // Always try to start customer tickets in a clear "Pending" state so
@@ -198,6 +188,33 @@ class TicketController extends Controller
             if ($ticket->branch) {
                 \App\Http\Controllers\Api\TicketController::clearManagerTicketsCache($ticket->branch->name);
             }
+            
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService(); 
+                $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+                
+                $firestoreService->database()
+                    ->collection('tickets')
+                    ->document($syncedTicket->ticket_id)
+                    ->set([
+                        'id' => $syncedTicket->id,
+                        'ticketId' => $syncedTicket->ticket_id,
+                        'customerId' => $syncedTicket->customer_id,
+                        'customerEmail' => $syncedTicket->customer->email ?? null,
+                        'assignedTo' => $syncedTicket->assigned_staff_id,
+                        'status' => $syncedTicket->status->name ?? 'Unknown',
+                        'statusColor' => $syncedTicket->status->color ?? '#gray',
+                        'serviceType' => $syncedTicket->service_type,
+                        'description' => $syncedTicket->description,
+                        'scheduledDate' => $syncedTicket->scheduled_date,
+                        'scheduledTime' => $syncedTicket->scheduled_time,
+                        'branch' => $syncedTicket->branch->name ?? null,
+                        'updatedAt' => new \DateTime(),
+                    ], ['merge' => true]);
+            } catch (\Exception $e) {
+                Log::error('Firestore sync failed in store (API): ' . $e->getMessage());
+            }
 
             return response()->json([
                 'success' => true,
@@ -211,12 +228,6 @@ class TicketController extends Controller
             $rules = [
                 'title' => ['required', 'string', 'max:255'],
                 'description' => ['required', 'string', 'max:5000'],
-                'priority' => ['required', \Illuminate\Validation\Rule::in([
-                    Ticket::PRIORITY_LOW,
-                    Ticket::PRIORITY_MEDIUM,
-                    Ticket::PRIORITY_HIGH,
-                    Ticket::PRIORITY_URGENT,
-                ])],
             ];
 
             // Admin and staff can assign customer and staff
@@ -230,6 +241,7 @@ class TicketController extends Controller
 
             $data = $validated;
             $data['ticket_id'] = Ticket::generateTicketId(); // Generate unique ticket ID
+            $data['priority'] = Ticket::PRIORITY_MEDIUM; // Force default
 
             // Customers can only create tickets for themselves
             if ($user->isCustomer()) {
@@ -264,6 +276,33 @@ class TicketController extends Controller
             // Clear manager tickets cache so branch manager sees new ticket immediately
             if ($ticket->branch) {
                 \App\Http\Controllers\Api\TicketController::clearManagerTicketsCache($ticket->branch->name);
+            }
+
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService(); 
+                $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+                
+                $firestoreService->database()
+                    ->collection('tickets')
+                    ->document($syncedTicket->ticket_id)
+                    ->set([
+                        'id' => $syncedTicket->id,
+                        'ticketId' => $syncedTicket->ticket_id,
+                        'customerId' => $syncedTicket->customer_id,
+                        'customerEmail' => $syncedTicket->customer->email ?? null,
+                        'assignedTo' => $syncedTicket->assigned_staff_id,
+                        'status' => $syncedTicket->status->name ?? 'Unknown',
+                        'statusColor' => $syncedTicket->status->color ?? '#gray',
+                        'serviceType' => $syncedTicket->service_type,
+                        'description' => $syncedTicket->description,
+                        'scheduledDate' => $syncedTicket->scheduled_date,
+                        'scheduledTime' => $syncedTicket->scheduled_time,
+                        'branch' => $syncedTicket->branch->name ?? null,
+                        'updatedAt' => new \DateTime(),
+                    ], ['merge' => true]);
+            } catch (\Exception $e) {
+                Log::error('Firestore sync failed in store (Web): ' . $e->getMessage());
             }
 
             return redirect()->route('tickets.show', $ticket)

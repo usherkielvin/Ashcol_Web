@@ -34,18 +34,7 @@
                         </select>
                     </div>
                     
-                    <div>
-                        <x-input-label for="priority" value="{{ __('Priority') }}" />
-                        <select id="priority" name="priority" 
-                            class="block mt-1 w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm">
-                            <option value="">All Priorities</option>
-                            @foreach($priorities as $key => $label)
-                                <option value="{{ $key }}" {{ request('priority') == $key ? 'selected' : '' }}>
-                                    {{ $label }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
+
                     
                     <div class="flex items-end">
                         <x-primary-button class="w-full">
@@ -78,14 +67,7 @@
                                                     style="background-color: {{ $ticket->status->color }}20; color: {{ $ticket->status->color }}">
                                                     {{ $ticket->status->name }}
                                                 </span>
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                                                    @if($ticket->priority === 'urgent') bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200
-                                                    @elseif($ticket->priority === 'high') bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200
-                                                    @elseif($ticket->priority === 'medium') bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
-                                                    @else bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300
-                                                    @endif">
-                                                    {{ ucfirst($ticket->priority) }}
-                                                </span>
+
                                                 @if($ticket->assignedStaff)
                                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
                                                         Assigned to {{ $ticket->assignedStaff->name }}

@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use App\Services\FirestoreService;
 
 class TicketController extends Controller
 {
@@ -93,7 +94,7 @@ class TicketController extends Controller
                     'address' => $ticket->address,
                     'contact' => $ticket->contact,
                     'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
-                    'priority' => $ticket->priority,
+
                     'status' => $ticket->status->name ?? 'Unknown',
                     'status_color' => $ticket->status->color ?? '#gray',
                     'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
@@ -153,7 +154,7 @@ class TicketController extends Controller
                 'address' => $ticket->address,
                 'contact' => $ticket->contact,
                 'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
-                'priority' => $ticket->priority,
+
                 'status' => $ticket->status->name ?? 'Unknown',
                 'status_color' => $ticket->status->color ?? '#gray',
                 'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
@@ -273,6 +274,34 @@ class TicketController extends Controller
         
         $ticket->update($updateData);
         
+        // Sync to Firestore
+        try {
+            $firestoreService = new FirestoreService(); 
+            // We need to fetch fresh ticket data with relations for sync
+            $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+            
+            $firestoreService->database()
+                ->collection('tickets')
+                ->document($syncedTicket->ticket_id)
+                ->set([
+                    'id' => $syncedTicket->id,
+                    'ticketId' => $syncedTicket->ticket_id,
+                    'customerId' => $syncedTicket->customer_id,
+                    'customerEmail' => $syncedTicket->customer->email ?? null,
+                    'assignedTo' => $syncedTicket->assigned_staff_id,
+                    'status' => $syncedTicket->status->name ?? 'Unknown',
+                    'statusColor' => $syncedTicket->status->color ?? '#gray',
+                    'serviceType' => $syncedTicket->service_type,
+                    'description' => $syncedTicket->description,
+                    'scheduledDate' => $syncedTicket->scheduled_date,
+                    'scheduledTime' => $syncedTicket->scheduled_time,
+                    'branch' => $syncedTicket->branch->name ?? null,
+                    'updatedAt' => new \DateTime(),
+                ], ['merge' => true]);
+        } catch (\Exception $e) {
+            Log::error('Firestore sync failed in updateStatus: ' . $e->getMessage());
+        }
+        
         Log::info("Ticket {$ticket->ticket_id} status updated to {$statusName} by user {$user->id}");
         
         return response()->json([
@@ -366,6 +395,33 @@ class TicketController extends Controller
             $ticket->update($updateData);
             $ticket->refresh(); // Reload relations/status
             
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService(); 
+                $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+                
+                $firestoreService->database()
+                    ->collection('tickets')
+                    ->document($syncedTicket->ticket_id)
+                    ->set([
+                        'id' => $syncedTicket->id,
+                        'ticketId' => $syncedTicket->ticket_id,
+                        'customerId' => $syncedTicket->customer_id,
+                        'customerEmail' => $syncedTicket->customer->email ?? null,
+                        'assignedTo' => $syncedTicket->assigned_staff_id,
+                        'status' => $syncedTicket->status->name ?? 'Unknown',
+                        'statusColor' => $syncedTicket->status->color ?? '#gray',
+                        'serviceType' => $syncedTicket->service_type,
+                        'description' => $syncedTicket->description,
+                        'scheduledDate' => $syncedTicket->scheduled_date,
+                        'scheduledTime' => $syncedTicket->scheduled_time,
+                        'branch' => $syncedTicket->branch->name ?? null,
+                        'updatedAt' => new \DateTime(),
+                    ], ['merge' => true]);
+            } catch (\Exception $e) {
+                Log::error('Firestore sync failed in setSchedule: ' . $e->getMessage());
+            }
+            
             // Clear manager cache for this branch
             if ($ticket->branch) {
                 self::clearManagerTicketsCache($ticket->branch->name);
@@ -373,6 +429,18 @@ class TicketController extends Controller
             
             // Clear employee cache for the assigned staff member
             Cache::forget("employee_tickets_{$staff->id}");
+            
+            // Send Firebase push notification to assigned employee
+            try {
+                $firebaseService = new \App\Services\FirebaseService();
+                $firebaseService->notifyTicketAssigned($ticket->ticket_id, $staff, $user);
+            } catch (\Exception $e) {
+                // Log error but don't fail the assignment
+                Log::warning('Failed to send FCM notification for ticket assignment', [
+                    'ticket_id' => $ticket->ticket_id,
+                    'error' => $e->getMessage()
+                ]);
+            }
             
             Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to staff {$staff->id} (status set to In Progress)", [
                 'ticket_id' => $ticket->ticket_id,
@@ -446,7 +514,6 @@ class TicketController extends Controller
                     'status_color' => $ticket->status->color ?? '#gray',
                     'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
                     'address' => $ticket->address,
-                    'priority' => $ticket->priority,
                     'service_type' => $ticket->service_type,
                     'branch' => $ticket->branch->name ?? null,
                 ];
@@ -526,7 +593,7 @@ class TicketController extends Controller
         // Optimized query - select only needed columns and minimal eager loading
         $query = Ticket::select([
             'id', 'ticket_id', 'title', 'description', 'service_type', 
-            'address', 'contact', 'preferred_date', 'priority', 
+            'address', 'contact', 'preferred_date', 
             'status_id', 'customer_id', 'branch_id', 'created_at', 'updated_at'
         ])->with([
             'status:id,name,color', // Only load status id, name, color
@@ -560,7 +627,6 @@ class TicketController extends Controller
                 'address' => $ticket->address ?? '',
                 'contact' => $ticket->contact ?? '',
                 'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
-                'priority' => $ticket->priority ?? 'medium',
                 'status' => $ticket->status->name ?? 'Unknown',
                 'status_color' => $ticket->status->color ?? '#gray',
                 'customer_name' => $customerName,
@@ -718,9 +784,7 @@ class TicketController extends Controller
                 'contact' => $ticket->contact ?? '',
                 'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
                 'scheduled_date' => $ticket->scheduled_date?->format('Y-m-d'),
-                'scheduled_time' => $ticket->scheduled_time,
                 'schedule_notes' => $ticket->schedule_notes,
-                'priority' => $ticket->priority ?? 'medium',
                 'status' => $ticket->status->name ?? 'Unknown',
                 'status_color' => $ticket->status->color ?? '#gray',
                 'customer_name' => $customerName,

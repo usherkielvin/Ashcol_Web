@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use App\Services\FirestoreService;
 
 class ProfileController extends Controller
 {
@@ -87,9 +88,6 @@ class ProfileController extends Controller
             }
         }
 
-        // Check if user has Facebook account linked
-        $hasFacebookAccount = $user->facebookAccount !== null;
-
         return response()->json([
             'success' => true,
             'data' => [
@@ -103,7 +101,6 @@ class ProfileController extends Controller
                 'city' => $user->city ?? null,
                 'branch' => $user->branch ?? null,
                 'profile_photo' => $profilePhotoUrl,
-                'has_facebook_account' => $hasFacebookAccount,
             ],
         ]);
     }
@@ -154,6 +151,29 @@ class ProfileController extends Controller
             // Update user profile_photo field
             $user->profile_photo = $path;
             $user->save();
+            
+            // clear cache
+            Cache::forget('user_' . $user->id);
+
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService();
+                $firestoreService->database()
+                    ->collection('users')
+                    ->document((string)$user->id)
+                    ->set([
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'branch' => $user->branch,
+                        'role' => $user->role,
+                        'profilePhoto' => asset('storage/' . $path),
+                        'updatedAt' => new \DateTime(),
+                    ], ['merge' => true]);
+            } catch (\Exception $e) {
+                // Log error but continue
+                \Illuminate\Support\Facades\Log::error('Firestore sync failed: ' . $e->getMessage());
+            }
 
             return response()->json([
                 'success' => true,
@@ -513,6 +533,46 @@ class ProfileController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete profile photo: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Register FCM token for push notifications
+     */
+    public function registerFCMToken(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'fcm_token' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'FCM token is required',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $user = $request->user();
+            $user->fcm_token = $request->fcm_token;
+            $user->save();
+
+            \Log::info('FCM token registered', [
+                'user_id' => $user->id,
+                'token' => substr($request->fcm_token, 0, 20) . '...'
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'FCM token registered successfully',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to register FCM token: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to register FCM token',
             ], 500);
         }
     }

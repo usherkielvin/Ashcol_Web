@@ -82,30 +82,7 @@
                 </div>
             </div>
 
-            <!-- Priority Breakdown -->
-            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
-                <div class="p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Priority Breakdown</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div class="text-center p-4 bg-red-100 dark:bg-red-900 rounded-lg">
-                            <p class="text-sm font-medium text-red-800 dark:text-red-200">Urgent</p>
-                            <p class="text-2xl font-bold text-red-600 dark:text-red-400 mt-2">{{ $priorityStats['urgent'] }}</p>
-                        </div>
-                        <div class="text-center p-4 bg-orange-100 dark:bg-orange-900 rounded-lg">
-                            <p class="text-sm font-medium text-orange-800 dark:text-orange-200">High</p>
-                            <p class="text-2xl font-bold text-orange-600 dark:text-orange-400 mt-2">{{ $priorityStats['high'] }}</p>
-                        </div>
-                        <div class="text-center p-4 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                            <p class="text-sm font-medium text-blue-800 dark:text-blue-200">Medium</p>
-                            <p class="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-2">{{ $priorityStats['medium'] }}</p>
-                        </div>
-                        <div class="text-center p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                            <p class="text-sm font-medium text-gray-800 dark:text-gray-200">Low</p>
-                            <p class="text-2xl font-bold text-gray-600 dark:text-gray-400 mt-2">{{ $priorityStats['low'] }}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+
 
             <!-- Recent Tickets -->
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
@@ -123,7 +100,7 @@
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Title</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Customer</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Priority</th>
+
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Created</th>
                                 </tr>
                             </thead>
@@ -142,11 +119,7 @@
                                                 {{ $ticket->status->name }}
                                             </span>
                                         </td>
-                                        <td class="px-4 py-3">
-                                            <span class="text-xs font-medium text-gray-900 dark:text-gray-100">
-                                                {{ ucfirst($ticket->priority) }}
-                                            </span>
-                                        </td>
+
                                         <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ $ticket->created_at->diffForHumans() }}</td>
                                     </tr>
                                 @empty

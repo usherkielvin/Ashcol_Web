@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ChatbotController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\TicketController;
+use App\Http\Controllers\Api\BranchController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -12,7 +13,6 @@ Route::prefix('v1')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/google-signin', [AuthController::class, 'googleSignIn']);
     Route::post('/google-register', [AuthController::class, 'googleRegister']); // New Google registration endpoint
-    Route::post('/facebook-signin', [AuthController::class, 'facebookSignIn']);
     Route::post('/send-verification-code', [AuthController::class, 'sendVerificationCode']);
     Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
     Route::post('/request-password-reset', [AuthController::class, 'requestPasswordReset']);
@@ -31,6 +31,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/profile/photo', [ProfileController::class, 'updatePhoto']);
         Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto']);
         Route::post('/update-location', [ProfileController::class, 'updateLocation']);
+        Route::post('/register-fcm-token', [ProfileController::class, 'registerFCMToken']);
         
         // Ticket routes - using the API TicketController
         Route::get('/test', [TicketController::class, 'test']); // Test endpoint
@@ -60,6 +61,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/manager/payments', [TicketController::class, 'getPaymentHistory']);
         Route::post('/payments/{paymentId}/submit', [TicketController::class, 'submitPaymentToManager']);
         Route::post('/payments/{paymentId}/complete', [TicketController::class, 'completePayment']);
+        
+        // Branch routes
+        Route::get('/branches', [BranchController::class, 'index']);
+        Route::post('/branches/sync-firestore', [BranchController::class, 'syncToFirestore']);
     });
 });
 

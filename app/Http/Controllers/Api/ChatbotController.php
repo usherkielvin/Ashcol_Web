@@ -176,7 +176,7 @@ class ChatbotController extends Controller
             $status = $ticket->status->name ?? 'Unknown';
             $response .= "📌 Ticket #{$ticket->id}: {$ticket->title}\n";
             $response .= "   Status: {$status}\n";
-            $response .= "   Priority: " . ucfirst($ticket->priority) . "\n";
+
             $response .= "   Created: " . $ticket->created_at->format('M d, Y') . "\n\n";
         }
 

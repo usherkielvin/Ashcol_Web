@@ -76,14 +76,7 @@
                                                     style="background-color: {{ $ticket->status->color }}20; color: {{ $ticket->status->color }}">
                                                     {{ $ticket->status->name }}
                                                 </span>
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                                                    @if($ticket->priority === 'urgent') bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200
-                                                    @elseif($ticket->priority === 'high') bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200
-                                                    @elseif($ticket->priority === 'medium') bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
-                                                    @else bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300
-                                                    @endif">
-                                                    {{ ucfirst($ticket->priority) }}
-                                                </span>
+
                                                 @if($ticket->assignedStaff)
                                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
                                                         Assigned to {{ $ticket->assignedStaff->name }}
@@ -124,7 +117,7 @@
                                     <tr>
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Title</th>
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Priority</th>
+
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Assigned To</th>
                                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Last Updated</th>
                                     </tr>
@@ -143,11 +136,7 @@
                                                     {{ $ticket->status->name }}
                                                 </span>
                                             </td>
-                                            <td class="px-4 py-3">
-                                                <span class="text-xs font-medium text-gray-900 dark:text-gray-100">
-                                                    {{ ucfirst($ticket->priority) }}
-                                                </span>
-                                            </td>
+
                                             <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                                 {{ $ticket->assignedStaff ? $ticket->assignedStaff->name : 'Unassigned' }}
                                             </td>

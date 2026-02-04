@@ -28,12 +28,8 @@ class StoreTicketRequest extends FormRequest
         $rules = [
             'title' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:5000'],
-            'priority' => ['required', Rule::in([
-                Ticket::PRIORITY_LOW,
-                Ticket::PRIORITY_MEDIUM,
-                Ticket::PRIORITY_HIGH,
-                Ticket::PRIORITY_URGENT,
-            ])],
+
+
         ];
 
         // Admin and staff can assign customer and staff
