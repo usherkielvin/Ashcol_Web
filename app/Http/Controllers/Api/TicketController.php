@@ -1175,4 +1175,107 @@ class TicketController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Get manager dashboard statistics and recent activity
+     */
+    public function getManagerDashboard(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user->isManager() && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to view manager dashboard',
+            ], 403);
+        }
+        
+        // Cache key for dashboard
+        $cacheKey = "manager_dashboard_{$user->id}_{$user->branch}";
+        
+        // Try cache first (cache for 2 minutes)
+        $cachedData = Cache::get($cacheKey);
+        if ($cachedData) {
+            return response()->json($cachedData);
+        }
+        
+        // Get manager's branch ID for filtering
+        $managerBranchId = null;
+        if ($user->isManager() && $user->branch) {
+            $branchCacheKey = "branch_id_{$user->branch}";
+            $managerBranchId = Cache::remember($branchCacheKey, 3600, function () use ($user) {
+                $branch = \App\Models\Branch::where('name', $user->branch)->first();
+                return $branch ? $branch->id : null;
+            });
+        }
+        
+        // Base query for manager's tickets
+        $query = Ticket::query();
+        
+        // Filter by branch for managers
+        if ($managerBranchId) {
+            $query->where('branch_id', $managerBranchId);
+        }
+        
+        // Get all tickets for this manager
+        $allTickets = $query->with('status')->get();
+        
+        // Calculate statistics
+        $stats = [
+            'total_tickets' => $allTickets->count(),
+            'pending' => $allTickets->filter(function ($ticket) {
+                $status = strtolower($ticket->status->name ?? '');
+                return in_array($status, ['pending', 'open']);
+            })->count(),
+            'in_progress' => $allTickets->filter(function ($ticket) {
+                $status = strtolower($ticket->status->name ?? '');
+                return in_array($status, ['in progress', 'accepted', 'ongoing']);
+            })->count(),
+            'completed' => $allTickets->filter(function ($ticket) {
+                $status = strtolower($ticket->status->name ?? '');
+                return in_array($status, ['completed', 'resolved', 'closed']);
+            })->count(),
+            'cancelled' => $allTickets->filter(function ($ticket) {
+                $status = strtolower($ticket->status->name ?? '');
+                return in_array($status, ['cancelled', 'rejected']);
+            })->count(),
+        ];
+        
+        // Get recent tickets (last 10)
+        $recentTickets = Ticket::with(['status', 'customer'])
+            ->when($managerBranchId, function ($q) use ($managerBranchId) {
+                $q->where('branch_id', $managerBranchId);
+            })
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get()
+            ->map(function ($ticket) {
+                $customerName = 'Unknown';
+                if ($ticket->customer) {
+                    $firstName = $ticket->customer->firstName ?? '';
+                    $lastName = $ticket->customer->lastName ?? '';
+                    $customerName = trim($firstName . ' ' . $lastName) ?: 'Unknown';
+                }
+                
+                return [
+                    'ticket_id' => $ticket->ticket_id,
+                    'status' => $ticket->status->name ?? 'Unknown',
+                    'status_color' => $ticket->status->color ?? '#gray',
+                    'customer_name' => $customerName,
+                    'service_type' => $ticket->service_type ?? '',
+                    'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
+                ];
+            });
+        
+        $responseData = [
+            'success' => true,
+            'stats' => $stats,
+            'recent_tickets' => $recentTickets,
+        ];
+        
+        // Cache the result for 2 minutes
+        Cache::put($cacheKey, $responseData, 120);
+        
+        return response()->json($responseData);
+    }
 }

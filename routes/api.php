@@ -43,6 +43,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/tickets/{ticketId}/reject', [TicketController::class, 'reject']);
         
         // Manager-specific routes
+        Route::get('/manager/dashboard', [TicketController::class, 'getManagerDashboard']);
         Route::get('/manager/tickets', [TicketController::class, 'getManagerTickets']);
         
         // Employee-specific routes
