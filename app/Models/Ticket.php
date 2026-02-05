@@ -93,7 +93,7 @@ class Ticket extends Model
     public static function generateTicketId()
     {
         do {
-            $ticketId = 'TCKTId_' . str_pad(rand(1, 9999), 4, '0', STR_PAD_LEFT);
+            $ticketId = 'ASH-' . str_pad(rand(1, 9999), 4, '0', STR_PAD_LEFT);
         } while (self::where('ticket_id', $ticketId)->exists());
 
         return $ticketId;

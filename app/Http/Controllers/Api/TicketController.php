@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use App\Services\FirestoreService;
 
 class TicketController extends Controller
 {
@@ -273,6 +274,34 @@ class TicketController extends Controller
         
         $ticket->update($updateData);
         
+        // Sync to Firestore
+        try {
+            $firestoreService = new FirestoreService(); 
+            // We need to fetch fresh ticket data with relations for sync
+            $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+            
+            $firestoreService->database()
+                ->collection('tickets')
+                ->document($syncedTicket->ticket_id)
+                ->set([
+                    'id' => $syncedTicket->id,
+                    'ticketId' => $syncedTicket->ticket_id,
+                    'customerId' => $syncedTicket->customer_id,
+                    'customerEmail' => $syncedTicket->customer->email ?? null,
+                    'assignedTo' => $syncedTicket->assigned_staff_id,
+                    'status' => $syncedTicket->status->name ?? 'Unknown',
+                    'statusColor' => $syncedTicket->status->color ?? '#gray',
+                    'serviceType' => $syncedTicket->service_type,
+                    'description' => $syncedTicket->description,
+                    'scheduledDate' => $syncedTicket->scheduled_date,
+                    'scheduledTime' => $syncedTicket->scheduled_time,
+                    'branch' => $syncedTicket->branch->name ?? null,
+                    'updatedAt' => new \DateTime(),
+                ], ['merge' => true]);
+        } catch (\Exception $e) {
+            Log::error('Firestore sync failed in updateStatus: ' . $e->getMessage());
+        }
+        
         Log::info("Ticket {$ticket->ticket_id} status updated to {$statusName} by user {$user->id}");
         
         return response()->json([
@@ -366,6 +395,33 @@ class TicketController extends Controller
             $ticket->update($updateData);
             $ticket->refresh(); // Reload relations/status
             
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService(); 
+                $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+                
+                $firestoreService->database()
+                    ->collection('tickets')
+                    ->document($syncedTicket->ticket_id)
+                    ->set([
+                        'id' => $syncedTicket->id,
+                        'ticketId' => $syncedTicket->ticket_id,
+                        'customerId' => $syncedTicket->customer_id,
+                        'customerEmail' => $syncedTicket->customer->email ?? null,
+                        'assignedTo' => $syncedTicket->assigned_staff_id,
+                        'status' => $syncedTicket->status->name ?? 'Unknown',
+                        'statusColor' => $syncedTicket->status->color ?? '#gray',
+                        'serviceType' => $syncedTicket->service_type,
+                        'description' => $syncedTicket->description,
+                        'scheduledDate' => $syncedTicket->scheduled_date,
+                        'scheduledTime' => $syncedTicket->scheduled_time,
+                        'branch' => $syncedTicket->branch->name ?? null,
+                        'updatedAt' => new \DateTime(),
+                    ], ['merge' => true]);
+            } catch (\Exception $e) {
+                Log::error('Firestore sync failed in setSchedule: ' . $e->getMessage());
+            }
+            
             // Clear manager cache for this branch
             if ($ticket->branch) {
                 self::clearManagerTicketsCache($ticket->branch->name);
@@ -373,6 +429,18 @@ class TicketController extends Controller
             
             // Clear employee cache for the assigned staff member
             Cache::forget("employee_tickets_{$staff->id}");
+            
+            // Send Firebase push notification to assigned employee
+            try {
+                $firebaseService = new \App\Services\FirebaseService();
+                $firebaseService->notifyTicketAssigned($ticket->ticket_id, $staff, $user);
+            } catch (\Exception $e) {
+                // Log error but don't fail the assignment
+                Log::warning('Failed to send FCM notification for ticket assignment', [
+                    'ticket_id' => $ticket->ticket_id,
+                    'error' => $e->getMessage()
+                ]);
+            }
             
             Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to staff {$staff->id} (status set to In Progress)", [
                 'ticket_id' => $ticket->ticket_id,
@@ -635,22 +703,13 @@ class TicketController extends Controller
             $statusFilter = strtolower($statusFilter);
             // Map common status names
             $statusMap = [
-                'pending' => ['pending', 'open'],
+                'pending' => ['Pending', 'pending', 'open', 'Open'],
                 // Treat "in progress", "accepted", and "ongoing" as the same bucket
-                'in_progress' => ['in progress', 'accepted', 'ongoing'],
-                'completed' => ['completed', 'resolved', 'closed'],
+                'in_progress' => ['In Progress', 'in progress', 'accepted', 'Accepted', 'ongoing', 'Ongoing'],
+                'completed' => ['Completed', 'completed', 'resolved', 'Resolved', 'closed', 'Closed'],
             ];
             
-            if (isset($statusMap[$statusFilter])) {
-                $query->whereHas('status', function ($q) use ($statusMap, $statusFilter) {
-                    $q->whereIn('name', $statusMap[$statusFilter]);
-                });
-            } else {
-                // Direct status name match
-                $query->whereHas('status', function ($q) use ($statusFilter) {
-                    $q->whereRaw('LOWER(name) = ?', [$statusFilter]);
-                });
-            }
+            // Filter application moved to after query initialization
         }
         
         // Cache key for employee tickets MUST include status so filters work correctly
@@ -677,6 +736,27 @@ class TicketController extends Controller
         // Always filter by assigned_staff_id for non-admin users
         if (!$user->isAdmin()) {
             $query->where('assigned_staff_id', $user->id);
+        }
+        
+        // Apply status filter if present
+        if ($statusFilter) {
+            $statusFilter = strtolower($statusFilter);
+            $statusMap = [
+                'pending' => ['Pending', 'pending', 'open', 'Open'],
+                'in_progress' => ['In Progress', 'in progress', 'accepted', 'Accepted', 'ongoing', 'Ongoing'],
+                'completed' => ['Completed', 'completed', 'resolved', 'Resolved', 'closed', 'Closed'],
+                'cancelled' => ['Cancelled', 'cancelled', 'Rejected', 'rejected', 'failed', 'Failed'],
+            ];
+            
+            if (isset($statusMap[$statusFilter])) {
+                $query->whereHas('status', function ($q) use ($statusMap, $statusFilter) {
+                    $q->whereIn('name', $statusMap[$statusFilter]);
+                });
+            } else {
+                 $query->whereHas('status', function ($q) use ($statusFilter) {
+                    $q->whereRaw('LOWER(name) = ?', [$statusFilter]);
+                });
+            }
         }
         
         Log::info("Querying employee tickets", [
@@ -1094,5 +1174,110 @@ class TicketController extends Controller
                 'completed_at' => $payment->completed_at->format('Y-m-d H:i:s'),
             ],
         ]);
+    }
+
+    /**
+     * Get manager dashboard statistics and recent activity
+     */
+    public function getManagerDashboard(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user->isManager() && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to view manager dashboard',
+            ], 403);
+        }
+        
+        // Cache key for dashboard
+        $cacheKey = "manager_dashboard_{$user->id}_{$user->branch}";
+        
+        // Try cache first (cache for 2 minutes)
+        $cachedData = Cache::get($cacheKey);
+        if ($cachedData) {
+            return response()->json($cachedData);
+        }
+        
+        // Get manager's branch ID for filtering
+        $managerBranchId = null;
+        if ($user->isManager() && $user->branch) {
+            $branchCacheKey = "branch_id_{$user->branch}";
+            $managerBranchId = Cache::remember($branchCacheKey, 3600, function () use ($user) {
+                $branch = \App\Models\Branch::where('name', $user->branch)->first();
+                return $branch ? $branch->id : null;
+            });
+        }
+        
+        // Base query for manager's tickets
+        $query = Ticket::query();
+        
+        // Filter by branch for managers
+        if ($managerBranchId) {
+            $query->where('branch_id', $managerBranchId);
+        }
+        
+        // Get all tickets for this manager
+        $allTickets = $query->with('status')->get();
+        
+        // Calculate statistics
+        $stats = [
+            'total_tickets' => $allTickets->count(),
+            'pending' => $allTickets->filter(function ($ticket) {
+                $status = strtolower($ticket->status->name ?? '');
+                return in_array($status, ['pending', 'open']);
+            })->count(),
+            'in_progress' => $allTickets->filter(function ($ticket) {
+                $status = strtolower($ticket->status->name ?? '');
+                return in_array($status, ['in progress', 'accepted', 'ongoing']);
+            })->count(),
+            'completed' => $allTickets->filter(function ($ticket) {
+                $status = strtolower($ticket->status->name ?? '');
+                return in_array($status, ['completed', 'resolved', 'closed']);
+            })->count(),
+            'cancelled' => $allTickets->filter(function ($ticket) {
+                $status = strtolower($ticket->status->name ?? '');
+                return in_array($status, ['cancelled', 'rejected']);
+            })->count(),
+        ];
+        
+        // Get recent tickets (last 10)
+        $recentTickets = Ticket::with(['status', 'customer'])
+            ->when($managerBranchId, function ($q) use ($managerBranchId) {
+                $q->where('branch_id', $managerBranchId);
+            })
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get()
+            ->map(function ($ticket) {
+                $customerName = 'Unknown';
+                if ($ticket->customer) {
+                    $firstName = $ticket->customer->firstName ?? '';
+                    $lastName = $ticket->customer->lastName ?? '';
+                    $customerName = trim($firstName . ' ' . $lastName) ?: 'Unknown';
+                }
+                
+                return [
+                    'ticket_id' => $ticket->ticket_id,
+                    'status' => $ticket->status->name ?? 'Unknown',
+                    'status_color' => $ticket->status->color ?? '#gray',
+                    'customer_name' => $customerName,
+                    'service_type' => $ticket->service_type ?? '',
+                    'description' => $ticket->description ?? '',
+                    'address' => $ticket->address ?? '',
+                    'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
+                ];
+            });
+        
+        $responseData = [
+            'success' => true,
+            'stats' => $stats,
+            'recent_tickets' => $recentTickets,
+        ];
+        
+        // Cache the result for 2 minutes
+        Cache::put($cacheKey, $responseData, 120);
+        
+        return response()->json($responseData);
     }
 }

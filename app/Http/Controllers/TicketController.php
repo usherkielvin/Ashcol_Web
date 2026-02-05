@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Log;
+use App\Services\FirestoreService;
 
 class TicketController extends Controller
 {
@@ -187,6 +188,40 @@ class TicketController extends Controller
             if ($ticket->branch) {
                 \App\Http\Controllers\Api\TicketController::clearManagerTicketsCache($ticket->branch->name);
             }
+            
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService();
+                
+                if ($firestoreService->isAvailable()) {
+                    $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+                    
+                    $firestoreService->database()
+                        ->collection('tickets')
+                        ->document($syncedTicket->ticket_id)
+                        ->set([
+                            'id' => $syncedTicket->id,
+                            'ticketId' => $syncedTicket->ticket_id,
+                            'customerId' => $syncedTicket->customer_id,
+                            'customerEmail' => $syncedTicket->customer->email ?? null,
+                            'assignedTo' => $syncedTicket->assigned_staff_id,
+                            'status' => $syncedTicket->status->name ?? 'Unknown',
+                            'statusColor' => $syncedTicket->status->color ?? '#gray',
+                            'serviceType' => $syncedTicket->service_type,
+                            'description' => $syncedTicket->description,
+                            'scheduledDate' => $syncedTicket->scheduled_date,
+                            'scheduledTime' => $syncedTicket->scheduled_time,
+                            'branch' => $syncedTicket->branch->name ?? null,
+                            'updatedAt' => new \DateTime(),
+                        ], ['merge' => true]);
+                    
+                    Log::info("Ticket {$syncedTicket->ticket_id} synced to Firestore successfully");
+                } else {
+                    Log::info("Firestore not available, skipping sync for ticket {$ticket->ticket_id}");
+                }
+            } catch (\Exception $e) {
+                Log::error('Firestore sync failed in store (API): ' . $e->getMessage());
+            }
 
             return response()->json([
                 'success' => true,
@@ -248,6 +283,40 @@ class TicketController extends Controller
             // Clear manager tickets cache so branch manager sees new ticket immediately
             if ($ticket->branch) {
                 \App\Http\Controllers\Api\TicketController::clearManagerTicketsCache($ticket->branch->name);
+            }
+
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService();
+                
+                if ($firestoreService->isAvailable()) {
+                    $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+                    
+                    $firestoreService->database()
+                        ->collection('tickets')
+                        ->document($syncedTicket->ticket_id)
+                        ->set([
+                            'id' => $syncedTicket->id,
+                            'ticketId' => $syncedTicket->ticket_id,
+                            'customerId' => $syncedTicket->customer_id,
+                            'customerEmail' => $syncedTicket->customer->email ?? null,
+                            'assignedTo' => $syncedTicket->assigned_staff_id,
+                            'status' => $syncedTicket->status->name ?? 'Unknown',
+                            'statusColor' => $syncedTicket->status->color ?? '#gray',
+                            'serviceType' => $syncedTicket->service_type,
+                            'description' => $syncedTicket->description,
+                            'scheduledDate' => $syncedTicket->scheduled_date,
+                            'scheduledTime' => $syncedTicket->scheduled_time,
+                            'branch' => $syncedTicket->branch->name ?? null,
+                            'updatedAt' => new \DateTime(),
+                        ], ['merge' => true]);
+                    
+                    Log::info("Ticket {$syncedTicket->ticket_id} synced to Firestore successfully");
+                } else {
+                    Log::info("Firestore not available, skipping sync for ticket {$ticket->ticket_id}");
+                }
+            } catch (\Exception $e) {
+                Log::error('Firestore sync failed in store (Web): ' . $e->getMessage());
             }
 
             return redirect()->route('tickets.show', $ticket)

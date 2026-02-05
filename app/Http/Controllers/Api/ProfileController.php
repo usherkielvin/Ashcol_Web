@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use App\Services\FirestoreService;
 
 class ProfileController extends Controller
 {
@@ -150,6 +151,29 @@ class ProfileController extends Controller
             // Update user profile_photo field
             $user->profile_photo = $path;
             $user->save();
+            
+            // clear cache
+            Cache::forget('user_' . $user->id);
+
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService();
+                $firestoreService->database()
+                    ->collection('users')
+                    ->document((string)$user->id)
+                    ->set([
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'branch' => $user->branch,
+                        'role' => $user->role,
+                        'profilePhoto' => asset('storage/' . $path),
+                        'updatedAt' => new \DateTime(),
+                    ], ['merge' => true]);
+            } catch (\Exception $e) {
+                // Log error but continue
+                \Illuminate\Support\Facades\Log::error('Firestore sync failed: ' . $e->getMessage());
+            }
 
             return response()->json([
                 'success' => true,
@@ -190,29 +214,130 @@ class ProfileController extends Controller
                 ], 401);
             }
 
-            // Check if user is a manager
-            if ($user->role !== 'manager') {
+            // Check if user is a manager or admin
+            if (!in_array($user->role, ['manager', 'admin'])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Access denied. Only managers can view employees.',
+                    'message' => 'Access denied. Only managers and admins can view employees.',
                 ], 403);
             }
 
-            // Get manager's branch directly from database
-            $managerBranch = DB::table('users')->where('id', $user->id)->value('branch');
-            
-            if (!$managerBranch) {
+            // For admins, get all employees; for managers, get only their branch employees
+            if ($user->role === 'admin') {
+                // Admin can see all employees
+                $employees = DB::table('users')
+                    ->whereIn('role', ['employee', 'staff', 'manager'])
+                    ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
+                    ->orderBy('branch')
+                    ->orderBy('firstName')
+                    ->get();
+
+                // Format employee data
+                $formattedEmployees = [];
+                foreach ($employees as $employee) {
+                    $formattedEmployees[] = [
+                        'id' => $employee->id,
+                        'username' => $employee->username,
+                        'firstName' => $employee->firstName,
+                        'lastName' => $employee->lastName,
+                        'email' => $employee->email,
+                        'role' => $employee->role,
+                        'branch' => $employee->branch,
+                    ];
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'employees' => $formattedEmployees,
+                    'branch' => 'All Branches',
+                    'employee_count' => count($formattedEmployees),
+                ]);
+            } else {
+                // Manager - get only their branch employees
+                // Get manager's branch directly from database
+                $managerBranch = DB::table('users')->where('id', $user->id)->value('branch');
+                
+                if (!$managerBranch) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Manager has no branch assigned.',
+                    ], 400);
+                }
+
+                // Get employees with the same branch name
+                $employees = DB::table('users')
+                    ->whereIn('role', ['employee', 'staff'])
+                    ->where('branch', $managerBranch)
+                    ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
+                    ->get();
+
+                // Format employee data
+                $formattedEmployees = [];
+                foreach ($employees as $employee) {
+                    $formattedEmployees[] = [
+                        'id' => $employee->id,
+                        'username' => $employee->username,
+                        'firstName' => $employee->firstName,
+                        'lastName' => $employee->lastName,
+                        'email' => $employee->email,
+                        'role' => $employee->role,
+                        'branch' => $employee->branch,
+                    ];
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'employees' => $formattedEmployees,
+                    'branch' => $managerBranch,
+                    'employee_count' => count($formattedEmployees),
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading employees: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get employees for a specific branch (admin only)
+     */
+    public function getEmployeesByBranch(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Manager has no branch assigned.',
+                    'message' => 'User not authenticated',
+                ], 401);
+            }
+
+            // Check if user is admin
+            if ($user->role !== 'admin') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only admins can view employees by branch.',
+                ], 403);
+            }
+
+            $branchName = $request->query('branch');
+            if (!$branchName) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Branch name is required.',
                 ], 400);
             }
 
-            // Get employees with the same branch name
+            // Get employees for the specified branch
             $employees = DB::table('users')
-                ->whereIn('role', ['employee', 'staff'])
-                ->where('branch', $managerBranch)
+                ->whereIn('role', ['employee', 'staff', 'manager'])
+                ->where('branch', $branchName)
                 ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
+                ->orderBy('firstName')
                 ->get();
 
             // Format employee data
@@ -232,7 +357,7 @@ class ProfileController extends Controller
             return response()->json([
                 'success' => true,
                 'employees' => $formattedEmployees,
-                'branch' => $managerBranch,
+                'branch' => $branchName,
                 'employee_count' => count($formattedEmployees),
             ]);
 
@@ -295,6 +420,87 @@ class ProfileController extends Controller
     }
 
     /**
+     * Get all branches
+     */
+    public function getBranches(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated',
+                ], 401);
+            }
+
+            // Check if user is admin or manager (both can view branches)
+            if (!in_array($user->role, ['admin', 'manager'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only admins and managers can view branches.',
+                ], 403);
+            }
+
+            // Get all branches from database
+            $branches = DB::table('branches')
+                ->where('is_active', true)
+                ->select('id', 'name', 'location', 'address', 'latitude', 'longitude')
+                ->orderBy('name')
+                ->get();
+
+            // Get employee counts and managers for each branch
+            $branchData = [];
+            foreach ($branches as $branch) {
+                // Count employees for this branch
+                $employeeCount = DB::table('users')
+                    ->whereIn('role', ['employee', 'staff', 'manager'])
+                    ->where('branch', $branch->name)
+                    ->count();
+
+                // Find manager for this branch
+                $manager = DB::table('users')
+                    ->where('role', 'manager')
+                    ->where('branch', $branch->name)
+                    ->select('firstName', 'lastName')
+                    ->first();
+
+                $managerName = 'No manager assigned';
+                if ($manager) {
+                    $managerName = trim(($manager->firstName ?? '') . ' ' . ($manager->lastName ?? ''));
+                    if (empty($managerName)) {
+                        $managerName = 'No manager assigned';
+                    }
+                }
+
+                $branchData[] = [
+                    'id' => $branch->id,
+                    'name' => $branch->name,
+                    'location' => $branch->location,
+                    'address' => $branch->address,
+                    'latitude' => $branch->latitude,
+                    'longitude' => $branch->longitude,
+                    'manager' => $managerName,
+                    'employee_count' => $employeeCount,
+                    'description' => 'Branch serving ' . strtolower(str_replace('ASHCOL ', '', $branch->name)) . ' area.',
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'branches' => $branchData,
+                'total_branches' => count($branchData),
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading branches: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Delete profile photo
      */
     public function deletePhoto(Request $request)
@@ -327,6 +533,46 @@ class ProfileController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete profile photo: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Register FCM token for push notifications
+     */
+    public function registerFCMToken(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'fcm_token' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'FCM token is required',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $user = $request->user();
+            $user->fcm_token = $request->fcm_token;
+            $user->save();
+
+            \Log::info('FCM token registered', [
+                'user_id' => $user->id,
+                'token' => substr($request->fcm_token, 0, 20) . '...'
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'FCM token registered successfully',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to register FCM token: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to register FCM token',
             ], 500);
         }
     }
