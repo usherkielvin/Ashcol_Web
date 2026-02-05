@@ -232,6 +232,15 @@ class ProfileController extends Controller
                     ->orderBy('firstName')
                     ->get();
 
+                // Get ticket counts for these employees
+                $ticketCounts = DB::table('tickets')
+                    ->select('assigned_staff_id', DB::raw('count(*) as total'))
+                    ->whereIn('assigned_staff_id', $employees->pluck('id'))
+                    // Optional: Filter by status if needed, e.g., excluding 'Closed'
+                    // ->whereIn('status_id', ...)
+                    ->groupBy('assigned_staff_id')
+                    ->pluck('total', 'assigned_staff_id');
+
                 // Format employee data
                 $formattedEmployees = [];
                 foreach ($employees as $employee) {
@@ -243,6 +252,7 @@ class ProfileController extends Controller
                         'email' => $employee->email,
                         'role' => $employee->role,
                         'branch' => $employee->branch,
+                        'ticket_count' => $ticketCounts[$employee->id] ?? 0,
                     ];
                 }
 
@@ -271,6 +281,13 @@ class ProfileController extends Controller
                     ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
                     ->get();
 
+                // Get ticket counts for these employees
+                $ticketCounts = DB::table('tickets')
+                    ->select('assigned_staff_id', DB::raw('count(*) as total'))
+                    ->whereIn('assigned_staff_id', $employees->pluck('id'))
+                    ->groupBy('assigned_staff_id')
+                    ->pluck('total', 'assigned_staff_id');
+
                 // Format employee data
                 $formattedEmployees = [];
                 foreach ($employees as $employee) {
@@ -282,6 +299,7 @@ class ProfileController extends Controller
                         'email' => $employee->email,
                         'role' => $employee->role,
                         'branch' => $employee->branch,
+                        'ticket_count' => $ticketCounts[$employee->id] ?? 0,
                     ];
                 }
 
@@ -340,6 +358,13 @@ class ProfileController extends Controller
                 ->orderBy('firstName')
                 ->get();
 
+            // Get ticket counts for these employees
+            $ticketCounts = DB::table('tickets')
+                ->select('assigned_staff_id', DB::raw('count(*) as total'))
+                ->whereIn('assigned_staff_id', $employees->pluck('id'))
+                ->groupBy('assigned_staff_id')
+                ->pluck('total', 'assigned_staff_id');
+
             // Format employee data
             $formattedEmployees = [];
             foreach ($employees as $employee) {
@@ -351,6 +376,7 @@ class ProfileController extends Controller
                     'email' => $employee->email,
                     'role' => $employee->role,
                     'branch' => $employee->branch,
+                    'ticket_count' => $ticketCounts[$employee->id] ?? 0,
                 ];
             }
 
