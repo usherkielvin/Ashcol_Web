@@ -186,7 +186,11 @@ class TicketController extends Controller
 
             // Clear manager tickets cache so branch manager sees new ticket immediately
             if ($ticket->branch) {
-                \App\Http\Controllers\Api\TicketController::clearManagerTicketsCache($ticket->branch->name);
+                try {
+                    \App\Http\Controllers\Api\TicketController::clearManagerTicketsCache($ticket->branch->name);
+                } catch (\Exception $e) {
+                    Log::warning('Failed to clear manager tickets cache: ' . $e->getMessage());
+                }
             }
             
             // Sync to Firestore
@@ -282,7 +286,11 @@ class TicketController extends Controller
 
             // Clear manager tickets cache so branch manager sees new ticket immediately
             if ($ticket->branch) {
-                \App\Http\Controllers\Api\TicketController::clearManagerTicketsCache($ticket->branch->name);
+                try {
+                    \App\Http\Controllers\Api\TicketController::clearManagerTicketsCache($ticket->branch->name);
+                } catch (\Exception $e) {
+                    Log::warning('Failed to clear manager tickets cache: ' . $e->getMessage());
+                }
             }
 
             // Sync to Firestore
