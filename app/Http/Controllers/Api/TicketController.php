@@ -955,6 +955,37 @@ class TicketController extends Controller
             
             DB::commit();
             
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService();
+                if ($firestoreService->isAvailable()) {
+                    $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+                    
+                    $firestoreService->database()
+                        ->collection('tickets')
+                        ->document($syncedTicket->ticket_id)
+                        ->set([
+                            'id' => $syncedTicket->id,
+                            'ticketId' => $syncedTicket->ticket_id,
+                            'customerId' => $syncedTicket->customer_id,
+                            'customerEmail' => $syncedTicket->customer->email ?? null,
+                            'assignedTo' => $syncedTicket->assigned_staff_id,
+                            'status' => $syncedTicket->status->name ?? 'Unknown',
+                            'statusColor' => $syncedTicket->status->color ?? '#gray',
+                            'serviceType' => $syncedTicket->service_type,
+                            'description' => $syncedTicket->description,
+                            'scheduledDate' => $syncedTicket->scheduled_date,
+                            'scheduledTime' => $syncedTicket->scheduled_time,
+                            'branch' => $syncedTicket->branch->name ?? null,
+                            'updatedAt' => new \DateTime(),
+                        ], ['merge' => true]);
+                    
+                    Log::info("Ticket {$syncedTicket->ticket_id} synced to Firestore successfully after completion");
+                }
+            } catch (\Exception $e) {
+                Log::error('Firestore sync failed in completeWorkWithPayment: ' . $e->getMessage());
+            }
+
             Log::info("Work completed with payment", [
                 'ticket_id' => $ticket->ticket_id,
                 'technician_id' => $user->id,
