@@ -116,14 +116,22 @@ class TicketController extends Controller
                 $data['status_id'] = $pendingStatus->id;
             } else {
                 $defaultStatus = TicketStatus::getDefault();
-                $data['status_id'] = $defaultStatus ? $defaultStatus->id : TicketStatus::first()?->id;
-            }
-
-            if (!$data['status_id']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No ticket status configured. Please run database migrations and seeders.',
-                ], 500);
+                if ($defaultStatus) {
+                    $data['status_id'] = $defaultStatus->id;
+                } else {
+                    $firstStatus = TicketStatus::first();
+                    if ($firstStatus) {
+                        $data['status_id'] = $firstStatus->id;
+                    } else {
+                        // Auto-create a default "Open" status if none exists
+                        $defaultStatus = TicketStatus::create([
+                            'name' => 'Open',
+                            'color' => '#10B981',
+                            'is_default' => true,
+                        ]);
+                        $data['status_id'] = $defaultStatus->id;
+                    }
+                }
             }
             $data['title'] = $validated['title'] ?? ($validated['service_type'] . ' Request');
             $data['ticket_id'] = Ticket::generateTicketId();
