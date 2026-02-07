@@ -34,6 +34,11 @@ class AuthController extends Controller
             }
         }
 
+        $normalizedRole = $user->role ?? 'customer';
+        if (in_array($normalizedRole, ['employee', 'staff'], true)) {
+            $normalizedRole = 'technician';
+        }
+
         return [
             'id' => $user->id,
             'username' => $user->username ?? null,
@@ -44,7 +49,7 @@ class AuthController extends Controller
             // Let's keep the key 'name' but generate it dynamically.
             'name' => trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? '')),
             'email' => $user->email ?? null,
-            'role' => $user->role ?? 'customer',
+            'role' => $normalizedRole,
             'region' => $user->region ?? null,
             'city' => $user->city ?? null,
             'location' => $user->location ?? null, // Legacy
