@@ -99,8 +99,11 @@ class TicketController extends Controller
                 'address' => 'required|string|max:255',
                 'contact' => 'required|string|max:255',
                 'service_type' => 'required|string|max:255',
+                'unit_type' => 'nullable|string|max:255',
                 'preferred_date' => 'nullable|string|date',
-                'image' => 'nullable|image|mimes:jpg,png,jpeg,gif|max:2048', // 2MB max
+                'image' => 'nullable|image|mimes:jpg,png,jpeg,gif|max:5120', // 5MB max
+                'latitude' => 'nullable|numeric',
+                'longitude' => 'nullable|numeric',
             ]);
 
             $data = $validated;
@@ -178,19 +181,73 @@ class TicketController extends Controller
 
             // Handle image upload
             if ($request->hasFile('image')) {
-                $ticketsDir = public_path('tickets');
-                if (!file_exists($ticketsDir)) {
-                    mkdir($ticketsDir, 0755, true);
+                try {
+                    $image = $request->file('image');
+                    
+                    // Validate the file before processing
+                    if (!$image->isValid()) {
+                        throw new \Exception('Invalid image file');
+                    }
+                    
+                    $ticketsDir = storage_path('app/public/tickets');
+                    if (!file_exists($ticketsDir)) {
+                        mkdir($ticketsDir, 0755, true);
+                    }
+                    
+                    // Get file info BEFORE moving
+                    $originalName = $image->getClientOriginalName();
+                    $extension = $image->getClientOriginalExtension();
+                    $imageName = time() . '_' . uniqid() . '.' . $extension;
+                    
+                    // Move the file
+                    $image->move($ticketsDir, $imageName);
+                    
+                    // Store both paths for compatibility
+                    $data['image_path'] = 'tickets/' . $imageName;
+                    $data['attachment_url'] = url('storage/tickets/' . $imageName);
+                    
+                    Log::info("Image uploaded for ticket", [
+                        'filename' => $imageName,
+                        'original_name' => $originalName,
+                        'path' => $data['image_path'],
+                        'url' => $data['attachment_url']
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error("Image upload failed", [
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Image upload failed: ' . $e->getMessage(),
+                    ], 500);
                 }
-                $image = $request->file('image');
-                $imageName = time() . '_' . $image->getClientOriginalName();
-                $image->move($ticketsDir, $imageName);
-                $data['image_path'] = 'tickets/' . $imageName;
             }
 
-            $ticket = Ticket::create($data);
+            // Update user coordinates if provided
+            if (isset($validated['latitude']) && isset($validated['longitude'])) {
+                $user->update([
+                    'latitude' => $validated['latitude'],
+                    'longitude' => $validated['longitude'],
+                ]);
+            }
 
-            $ticket->load(['customer', 'status', 'branch']);
+            try {
+                $ticket = Ticket::create($data);
+                $ticket->load(['customer', 'status', 'branch']);
+            } catch (\Exception $e) {
+                Log::error("Ticket creation failed", [
+                    'error' => $e->getMessage(),
+                    'data' => $data,
+                    'trace' => $e->getTraceAsString()
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create ticket: ' . $e->getMessage(),
+                ], 500);
+            }
 
             // Clear manager tickets cache so branch manager sees new ticket immediately
             if ($ticket->branch) {
