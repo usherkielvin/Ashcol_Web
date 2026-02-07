@@ -46,10 +46,18 @@ Route::prefix('v1')->group(function () {
         Route::get('/manager/dashboard', [TicketController::class, 'getManagerDashboard']);
         Route::get('/manager/tickets', [TicketController::class, 'getManagerTickets']);
         
-        // Technician-specific routes (legacy /employee paths)
+        // Technician-specific routes
+        Route::get('/technician/tickets', [TicketController::class, 'getEmployeeTickets']);
+        Route::get('/technician/schedule', [TicketController::class, 'getEmployeeSchedule']);
+
+        // Legacy /employee aliases (Android compatibility)
         Route::get('/employee/tickets', [TicketController::class, 'getEmployeeTickets']);
         Route::get('/employee/schedule', [TicketController::class, 'getEmployeeSchedule']);
-        
+
+        Route::get('/technicians', [ProfileController::class, 'getEmployees']);
+        Route::get('/technicians/by-branch', [ProfileController::class, 'getEmployeesByBranch']);
+
+        // Legacy /employees aliases
         Route::get('/employees', [ProfileController::class, 'getEmployees']);
         Route::get('/employees/by-branch', [ProfileController::class, 'getEmployeesByBranch']);
         Route::get('/branches', [ProfileController::class, 'getBranches']);
