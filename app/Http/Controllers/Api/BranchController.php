@@ -25,9 +25,9 @@ class BranchController extends Controller
                         ->where('role', \App\Models\User::ROLE_MANAGER)
                         ->first();
                     
-                    // Get employee count (staff/employee only, not including manager)
+                    // Get employee count (technicians only, not including manager)
                     $employeeCount = \App\Models\User::where('branch', $branch->name)
-                        ->whereIn('role', [\App\Models\User::ROLE_STAFF, 'employee'])
+                        ->whereIn('role', [\App\Models\User::ROLE_TECHNICIAN])
                         ->count();
                     
                     return [

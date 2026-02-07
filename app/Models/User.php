@@ -20,7 +20,7 @@ class User extends Authenticatable
      */
     const ROLE_ADMIN = 'admin';
     const ROLE_MANAGER = 'manager';
-    const ROLE_STAFF = 'staff';
+    const ROLE_TECHNICIAN = 'technician';
     const ROLE_CUSTOMER = 'customer';
 
     /**
@@ -77,11 +77,11 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is staff
+     * Check if user is technician
      */
-    public function isStaff(): bool
+    public function isTechnician(): bool
     {
-        return $this->role === self::ROLE_STAFF;
+        return $this->role === self::ROLE_TECHNICIAN;
     }
 
     /**
@@ -101,11 +101,11 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is admin or staff
+     * Check if user is admin or technician
      */
-    public function isAdminOrStaff(): bool
+    public function isAdminOrTechnician(): bool
     {
-        return $this->isAdmin() || $this->isStaff() || $this->isManager();
+        return $this->isAdmin() || $this->isTechnician() || $this->isManager();
     }
 
     /**
@@ -117,7 +117,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Get tickets assigned to this user (as staff)
+     * Get tickets assigned to this user (as technician)
      */
     public function assignedTickets(): HasMany
     {

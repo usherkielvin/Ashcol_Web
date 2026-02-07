@@ -12,7 +12,7 @@ class TicketSeeder extends Seeder
     public function run(): void
     {
         $admin = User::where('email', 'admin@example.com')->first();
-        $staff = User::where('email', 'staff@example.com')->first();
+        $staff = User::where('email', 'technician@example.com')->first();
         $customer = User::where('email', 'customer@example.com')->first();
 
         if (!$admin || !$staff || !$customer) {
@@ -35,7 +35,7 @@ class TicketSeeder extends Seeder
             'priority' => 'high',
         ]);
 
-        // Assigned to staff
+        // Assigned to technician
         Ticket::create([
             'ticket_id' => 'ASH-' . str_pad(2, 4, '0', STR_PAD_LEFT),
             'title' => 'Payment not reflected',

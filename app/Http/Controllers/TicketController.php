@@ -28,8 +28,8 @@ class TicketController extends Controller
         if ($user->isCustomer()) {
             // Customers see only their own tickets
             $query->where('customer_id', $user->id);
-        } elseif ($user->isStaff()) {
-            // Staff see only tickets assigned to them
+        } elseif ($user->isTechnician()) {
+            // Technicians see only tickets assigned to them
             $query->where('assigned_staff_id', $user->id);
         } elseif ($user->isManager()) {
             // Managers see all tickets from their branch
@@ -72,7 +72,7 @@ class TicketController extends Controller
     {
         $this->authorize('create', Ticket::class);
         $statuses = TicketStatus::all();
-        $staff = User::whereIn('role', [User::ROLE_ADMIN, User::ROLE_STAFF])->get();
+        $staff = User::whereIn('role', [User::ROLE_ADMIN, User::ROLE_TECHNICIAN])->get();
         
         return view('tickets.create', [
             'statuses' => $statuses,
@@ -306,8 +306,8 @@ class TicketController extends Controller
                 'description' => ['required', 'string', 'max:5000'],
             ];
 
-            // Admin and staff can assign customer and staff
-            if ($user->isAdminOrStaff()) {
+            // Admin and technician can assign customer and technician
+            if ($user->isAdminOrTechnician()) {
                 $rules['customer_id'] = ['nullable', 'exists:users,id'];
                 $rules['assigned_staff_id'] = ['nullable', 'exists:users,id'];
                 $rules['status_id'] = ['nullable', 'exists:ticket_statuses,id'];
@@ -342,7 +342,7 @@ class TicketController extends Controller
                 }
             }
 
-            // If no staff assigned, set to null
+            // If no technician assigned, set to null
             if (empty($data['assigned_staff_id'])) {
                 $data['assigned_staff_id'] = null;
             }
@@ -418,7 +418,7 @@ class TicketController extends Controller
         $this->authorize('update', $ticket);
         $ticket->load(['customer', 'assignedStaff', 'status']);
         $statuses = TicketStatus::all();
-        $staff = User::whereIn('role', [User::ROLE_ADMIN, User::ROLE_STAFF])->get();
+        $staff = User::whereIn('role', [User::ROLE_ADMIN, User::ROLE_TECHNICIAN])->get();
         
         return view('tickets.edit', [
             'ticket' => $ticket,
@@ -435,7 +435,7 @@ class TicketController extends Controller
         $this->authorize('update', $ticket);
         $data = $request->validated();
         
-        // If no staff assigned, set to null
+        // If no technician assigned, set to null
         if (empty($data['assigned_staff_id'])) {
             $data['assigned_staff_id'] = null;
         }

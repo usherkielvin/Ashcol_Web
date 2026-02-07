@@ -25,10 +25,10 @@ class DatabaseSeeder extends Seeder
             'email' => 'admin@example.com',
         ]);
 
-        // Create staff user
-        User::factory()->staff()->create([
-            'name' => 'Staff User',
-            'email' => 'staff@example.com',
+        // Create technician user
+        User::factory()->technician()->create([
+            'name' => 'Technician User',
+            'email' => 'technician@example.com',
         ]);
 
         // Create employee account with specific credentials
@@ -39,7 +39,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Employee User',
             'email' => 'employee@ashcol.com',
             'password' => \Illuminate\Support\Facades\Hash::make('EMP1234'),
-            'role' => User::ROLE_STAFF,
+            'role' => User::ROLE_TECHNICIAN,
             'email_verified_at' => now(),
         ]);
 
@@ -51,7 +51,7 @@ class DatabaseSeeder extends Seeder
 
         // Create additional test users
         User::factory(5)->customer()->create();
-        User::factory(2)->staff()->create();
+        User::factory(2)->technician()->create();
 
         // Seed sample tickets
         $this->call([

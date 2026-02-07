@@ -13,8 +13,8 @@ class UpdateTicketRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        // Only admin/staff can update tickets
-        return $this->user()->isAdminOrStaff();
+        // Only admin/technician can update tickets
+        return $this->user()->isAdminOrTechnician();
     }
 
     /**

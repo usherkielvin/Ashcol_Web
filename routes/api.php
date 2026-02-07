@@ -46,7 +46,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/manager/dashboard', [TicketController::class, 'getManagerDashboard']);
         Route::get('/manager/tickets', [TicketController::class, 'getManagerTickets']);
         
-        // Employee-specific routes
+        // Technician-specific routes (legacy /employee paths)
         Route::get('/employee/tickets', [TicketController::class, 'getEmployeeTickets']);
         Route::get('/employee/schedule', [TicketController::class, 'getEmployeeSchedule']);
         

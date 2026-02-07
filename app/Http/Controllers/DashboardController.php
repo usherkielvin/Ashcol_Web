@@ -19,7 +19,7 @@ class DashboardController extends Controller
 
         if ($user->isAdmin()) {
             return $this->adminDashboard($user);
-        } elseif ($user->isStaff()) {
+        } elseif ($user->isTechnician()) {
             return $this->staffDashboard($user);
         } else {
             return $this->customerDashboard($user);
@@ -35,7 +35,7 @@ class DashboardController extends Controller
         $totalTickets = Ticket::count();
         $totalUsers = User::count();
         $totalCustomers = User::where('role', User::ROLE_CUSTOMER)->count();
-        $totalStaff = User::whereIn('role', [User::ROLE_ADMIN, User::ROLE_STAFF])->count();
+        $totalStaff = User::whereIn('role', [User::ROLE_ADMIN, User::ROLE_TECHNICIAN])->count();
 
         // Ticket statistics by status
         $ticketsByStatus = TicketStatus::withCount('tickets')->get();
@@ -68,7 +68,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * Staff dashboard with assigned tickets.
+     * Technician dashboard with assigned tickets.
      */
     private function staffDashboard(User $user): View
     {
@@ -92,7 +92,7 @@ class DashboardController extends Controller
             ->latest()
             ->get();
 
-        // Unassigned tickets (staff can see these to assign themselves)
+        // Unassigned tickets (technicians can see these to assign themselves)
         $unassignedTickets = Ticket::whereNull('assigned_staff_id')
             ->with(['customer', 'status'])
             ->latest()

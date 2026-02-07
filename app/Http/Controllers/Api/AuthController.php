@@ -471,7 +471,7 @@ class AuthController extends Controller
                 'email' => 'required|string|email|max:255',
                 'password' => 'required|string|min:8|confirmed',
                 'password_confirmation' => 'required|string|min:8',
-                'role' => 'required|string|in:customer,employee,manager,admin',
+                'role' => 'required|string|in:customer,technician,manager,admin',
                 'region' => 'nullable|string|max:255',
                 'city' => 'nullable|string|max:255',
                 // Accept legacy location field but it is optional and mainly for backward compatibility

@@ -20,7 +20,7 @@ class CreateEmployeeAccount extends Command
      *
      * @var string
      */
-    protected $description = 'Create employee account with username Employee and password EMP1234';
+    protected $description = 'Create technician account with username Employee and password EMP1234';
 
     /**
      * Execute the console command.
@@ -38,7 +38,7 @@ class CreateEmployeeAccount extends Command
             return Command::SUCCESS;
         }
 
-        // Create employee account
+        // Create technician account
         $user = User::create([
             'username' => 'Employee',
             'firstName' => 'Employee',
@@ -46,15 +46,15 @@ class CreateEmployeeAccount extends Command
             'name' => 'Employee User',
             'email' => 'employee@ashcol.com',
             'password' => Hash::make('EMP1234'),
-            'role' => User::ROLE_STAFF,
+            'role' => User::ROLE_TECHNICIAN,
             'email_verified_at' => now(),
         ]);
 
-        $this->info('Employee account created successfully!');
+        $this->info('Technician account created successfully!');
         $this->info('Username: Employee');
         $this->info('Password: EMP1234');
         $this->info('Email: employee@ashcol.com');
-        $this->info('Role: Staff (Employee)');
+        $this->info('Role: Technician');
 
         return Command::SUCCESS;
     }

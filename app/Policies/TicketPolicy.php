@@ -20,7 +20,7 @@ class TicketPolicy
      */
     public function view(User $user, Ticket $ticket): bool
     {
-        if ($user->isAdmin() || $user->isStaff()) {
+        if ($user->isAdmin() || $user->isTechnician()) {
             return true;
         }
         return $ticket->customer_id === $user->id;
@@ -39,8 +39,8 @@ class TicketPolicy
      */
     public function update(User $user, Ticket $ticket): bool
     {
-        // Admin and staff can update; customers cannot
-        return $user->isAdminOrStaff();
+        // Admin and technician can update; customers cannot
+        return $user->isAdminOrTechnician();
     }
 
     /**

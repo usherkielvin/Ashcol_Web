@@ -61,12 +61,12 @@ class UserFactory extends Factory
     }
 
     /**
-     * Indicate that the user is staff.
+     * Indicate that the user is a technician.
      */
-    public function staff(): static
+    public function technician(): static
     {
         return $this->state(fn (array $attributes) => [
-            'role' => User::ROLE_STAFF,
+            'role' => User::ROLE_TECHNICIAN,
         ]);
     }
 

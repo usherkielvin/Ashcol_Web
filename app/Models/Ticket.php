@@ -58,7 +58,7 @@ class Ticket extends Model
     }
 
     /**
-     * Get the staff member assigned to the ticket
+     * Get the technician assigned to the ticket
      */
     public function assignedStaff(): BelongsTo
     {

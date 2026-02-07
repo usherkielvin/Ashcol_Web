@@ -62,9 +62,9 @@ class TicketController extends Controller
                     $q->where('name', $user->branch);
                 });
             }
-        } elseif ($user->isStaff()) {
-            // Staff/Employees see only tickets assigned to them
-            Log::info('Filtering tickets for staff/employee', ['staff_id' => $user->id]);
+        } elseif ($user->isTechnician()) {
+            // Technicians see only tickets assigned to them
+            Log::info('Filtering tickets for technician', ['technician_id' => $user->id]);
             $query->where('assigned_staff_id', $user->id);
         } elseif ($user->isAdmin()) {
             // Admins see all tickets
@@ -134,7 +134,7 @@ class TicketController extends Controller
             ], 403);
         }
         
-        if (($user->isManager() || $user->isStaff()) && $user->branch) {
+        if (($user->isManager() || $user->isTechnician()) && $user->branch) {
             if (!$ticket->branch || $ticket->branch->name !== $user->branch) {
                 return response()->json([
                     'success' => false,
@@ -179,19 +179,19 @@ class TicketController extends Controller
     }
     
     /**
-     * Update ticket status (for managers/staff)
+     * Update ticket status (for managers/technicians)
      */
     public function updateStatus(Request $request, $ticketId)
     {
         $user = $request->user();
         
-        // Allow managers, staff, admins, and technicians (employee role)
+        // Allow managers, technicians, and admins
         $userRole = strtolower($user->role ?? '');
         if (
             !$user->isManager() &&
-            !$user->isStaff() &&
+            !$user->isTechnician() &&
             !$user->isAdmin() &&
-            $userRole !== 'employee'
+            $userRole !== 'technician'
         ) {
             return response()->json([
                 'success' => false,
@@ -214,7 +214,7 @@ class TicketController extends Controller
         }
         
         // Extra safety: technicians can only update tickets assigned to them
-        if ($userRole === 'employee') {
+        if ($userRole === 'technician') {
             if ((int) $ticket->assigned_staff_id !== (int) $user->id) {
                 return response()->json([
                     'success' => false,
@@ -223,8 +223,8 @@ class TicketController extends Controller
             }
         }
         
-        // Check if user can manage this ticket (same branch) for managers/staff
-        if (($user->isManager() || $user->isStaff()) && $user->branch) {
+        // Check if user can manage this ticket (same branch) for managers/technicians
+        if (($user->isManager() || $user->isTechnician()) && $user->branch) {
             if (!$ticket->branch || $ticket->branch->name !== $user->branch) {
                 return response()->json([
                     'success' => false,
@@ -257,16 +257,16 @@ class TicketController extends Controller
         
         $updateData = ['status_id' => $status->id];
         
-        // If assigning staff, validate they belong to the same branch
+        // If assigning technician, validate they belong to the same branch
         if (isset($validated['assigned_staff_id'])) {
             $staff = User::find($validated['assigned_staff_id']);
-            if ($staff && ($staff->isStaff() || $staff->isManager())) {
+            if ($staff && ($staff->isTechnician() || $staff->isManager())) {
                 if ($user->branch && $staff->branch === $user->branch) {
                     $updateData['assigned_staff_id'] = $validated['assigned_staff_id'];
                 } else {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Staff member must belong to the same branch',
+                        'message' => 'Technician must belong to the same branch',
                     ], 400);
                 }
             }
@@ -326,7 +326,7 @@ class TicketController extends Controller
     {
         $user = $request->user();
         
-        if (!$user->isManager() && !$user->isStaff() && !$user->isAdmin()) {
+        if (!$user->isManager() && !$user->isTechnician() && !$user->isAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized to set ticket schedule',
@@ -349,20 +349,20 @@ class TicketController extends Controller
             ], 404);
         }
         
-        // Find the staff member to assign
+        // Find the technician to assign
         $staff = User::find($validated['assigned_staff_id']);
         
         if (!$staff) {
-            Log::error("Assignment failed: Staff user not found", ['staff_id' => $validated['assigned_staff_id']]);
+            Log::error("Assignment failed: Technician user not found", ['staff_id' => $validated['assigned_staff_id']]);
             return response()->json([
                 'success' => false,
-                'message' => 'Staff member not found',
+                'message' => 'Technician not found',
             ], 404);
         }
         
-        // Check if user has valid role (staff or manager)
+        // Check if user has valid role (technician or manager)
         $staffRole = strtolower($staff->role ?? '');
-        $isValidRole = in_array($staffRole, ['staff', 'employee', 'manager']);
+        $isValidRole = in_array($staffRole, ['technician', 'manager']);
         
         if (!$isValidRole) {
             Log::error("Assignment failed: Invalid role", [
@@ -442,7 +442,7 @@ class TicketController extends Controller
                 ]);
             }
             
-            Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to staff {$staff->id} (status set to In Progress)", [
+            Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to technician {$staff->id} (status set to In Progress)", [
                 'ticket_id' => $ticket->ticket_id,
                 'assigned_staff_id' => $staff->id,
                 'assigned_staff_name' => trim(($staff->firstName ?? '') . ' ' . ($staff->lastName ?? '')),
@@ -479,13 +479,13 @@ class TicketController extends Controller
     }
     
     /**
-     * Get employee's scheduled tickets
+     * Get technician scheduled tickets
      */
     public function getEmployeeSchedule(Request $request)
     {
         $user = $request->user();
         
-        if (!$user->isStaff() && !$user->isManager()) {
+        if (!$user->isTechnician() && !$user->isManager()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized to view schedule',
@@ -669,29 +669,29 @@ class TicketController extends Controller
     }
 
     /**
-     * Get tickets assigned to employee
+     * Get tickets assigned to technician
      */
     public function getEmployeeTickets(Request $request)
     {
         $user = $request->user();
         
-        // Check if user is staff, employee, or admin (more flexible role checking)
+        // Check if user is technician or admin
         $userRole = strtolower($user->role ?? '');
-        $isValidRole = in_array($userRole, ['staff', 'employee']) || $user->isAdmin();
+        $isValidRole = in_array($userRole, ['technician']) || $user->isAdmin();
         
         if (!$isValidRole) {
-            Log::warning("Unauthorized employee tickets access attempt", [
+            Log::warning("Unauthorized technician tickets access attempt", [
                 'user_id' => $user->id,
                 'user_role' => $user->role,
                 'user_email' => $user->email
             ]);
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized to view employee tickets. Your role: ' . ($user->role ?? 'unknown'),
+                'message' => 'Unauthorized to view technician tickets. Your role: ' . ($user->role ?? 'unknown'),
             ], 403);
         }
         
-        Log::info("Employee tickets request", [
+        Log::info("Technician tickets request", [
             'user_id' => $user->id,
             'user_role' => $user->role,
             'user_email' => $user->email
@@ -712,13 +712,13 @@ class TicketController extends Controller
             // Filter application moved to after query initialization
         }
         
-        // Cache key for employee tickets MUST include status so filters work correctly
+        // Cache key for technician tickets MUST include status so filters work correctly
         $cacheKey = "employee_tickets_{$user->id}_" . ($statusFilter ?: 'all');
         
         // Try cache first (2 minutes)
         $cachedData = Cache::get($cacheKey);
         if ($cachedData) {
-            Log::info("Returning cached employee tickets", [
+            Log::info("Returning cached technician tickets", [
                 'user_id' => $user->id,
                 'ticket_count' => count($cachedData),
                 'status_filter' => $statusFilter ?: 'all',
@@ -732,7 +732,7 @@ class TicketController extends Controller
         
         $query = Ticket::with(['status', 'customer', 'branch', 'assignedStaff']);
         
-        // Filter by assigned staff for employees - only show tickets assigned to this employee
+        // Filter by assigned staff for technicians - only show tickets assigned to this technician
         // Always filter by assigned_staff_id for non-admin users
         if (!$user->isAdmin()) {
             $query->where('assigned_staff_id', $user->id);
@@ -759,7 +759,7 @@ class TicketController extends Controller
             }
         }
         
-        Log::info("Querying employee tickets", [
+        Log::info("Querying technician tickets", [
             'user_id' => $user->id,
             'assigned_staff_id_filter' => $user->id,
             'status_filter' => $statusFilter ?? 'all'
@@ -772,7 +772,7 @@ class TicketController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
         
-        Log::info("Found employee tickets", [
+        Log::info("Found technician tickets", [
             'user_id' => $user->id,
             'ticket_count' => $tickets->count(),
             'ticket_ids' => $tickets->pluck('ticket_id')->toArray()
@@ -812,7 +812,7 @@ class TicketController extends Controller
         // Cache for 2 minutes, per-user and per-status
         Cache::put($cacheKey, $ticketData, 120);
         
-        Log::info("Employee tickets response prepared", [
+        Log::info("Technician tickets response prepared", [
             'user_id' => $user->id,
             'ticket_count' => count($ticketData)
         ]);
@@ -824,7 +824,7 @@ class TicketController extends Controller
     }
 
     /**
-     * Get employees for staff assignment
+     * Get technicians for assignment
      */
     public function getEmployees(Request $request)
     {
@@ -839,7 +839,7 @@ class TicketController extends Controller
         
         // Optimized query with specific column selection
         $query = User::select('id', 'firstName', 'lastName', 'email', 'role', 'branch')
-            ->where('role', 'staff');
+            ->where('role', 'technician');
         
         // Filter by branch for managers (will use the new index)
         if ($user->isManager() && $user->branch) {
@@ -876,9 +876,9 @@ class TicketController extends Controller
     {
         $user = $request->user();
         
-        // Only staff/technicians can complete work
+        // Only technicians can complete work
         $userRole = strtolower($user->role ?? '');
-        if (!in_array($userRole, ['staff', 'employee']) && !$user->isAdmin()) {
+        if (!in_array($userRole, ['technician']) && !$user->isAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized to complete work',
@@ -1083,9 +1083,9 @@ class TicketController extends Controller
     {
         $user = $request->user();
         
-        // Only staff/technicians can submit payments
+        // Only technicians can submit payments
         $userRole = strtolower($user->role ?? '');
-        if (!in_array($userRole, ['staff', 'employee']) && !$user->isAdmin()) {
+        if (!in_array($userRole, ['technician']) && !$user->isAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized to submit payment',

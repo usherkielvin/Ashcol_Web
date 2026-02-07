@@ -4,7 +4,7 @@
             <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
                 {{ __('Ticket Details') }}
             </h2>
-            @if(auth()->user()->isAdminOrStaff())
+            @if(auth()->user()->isAdminOrTechnician())
                 <a href="{{ route('tickets.edit', $ticket) }}" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">
                     {{ __('Edit Ticket') }}
                 </a>
@@ -47,7 +47,7 @@
                             <p class="text-gray-500 dark:text-gray-400 text-xs">{{ $ticket->customer->email }}</p>
                         </div>
                         <div>
-                            <p class="text-gray-500 dark:text-gray-400">Assigned Staff:</p>
+                            <p class="text-gray-500 dark:text-gray-400">Assigned Technician:</p>
                             @if($ticket->assignedStaff)
                                 <p class="text-gray-900 dark:text-gray-100 font-medium">{{ $ticket->assignedStaff->name }}</p>
                                 <p class="text-gray-500 dark:text-gray-400 text-xs">{{ $ticket->assignedStaff->email }}</p>
@@ -99,7 +99,7 @@
                                         </div>
                                         <p class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ $comment->comment }}</p>
                                     </div>
-                                    @if($comment->user_id === auth()->id() || auth()->user()->isAdminOrStaff())
+                                    @if($comment->user_id === auth()->id() || auth()->user()->isAdminOrTechnician())
                                         <form method="POST" action="{{ route('ticket-comments.destroy', $comment) }}" class="ml-4">
                                             @csrf
                                             @method('DELETE')

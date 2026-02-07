@@ -31,7 +31,7 @@ class ValidateUserRoles extends Command
         $validRoles = [
             User::ROLE_ADMIN,
             User::ROLE_MANAGER,
-            User::ROLE_STAFF,
+            User::ROLE_TECHNICIAN,
             User::ROLE_CUSTOMER,
         ];
         
@@ -71,9 +71,10 @@ class ValidateUserRoles extends Command
     private function suggestRole($invalidRole)
     {
         $suggestions = [
-            'employee' => User::ROLE_STAFF,
-            'emp' => User::ROLE_STAFF,
-            'worker' => User::ROLE_STAFF,
+            'employee' => User::ROLE_TECHNICIAN,
+            'emp' => User::ROLE_TECHNICIAN,
+            'worker' => User::ROLE_TECHNICIAN,
+            'staff' => User::ROLE_TECHNICIAN,
             'user' => User::ROLE_CUSTOMER,
             'client' => User::ROLE_CUSTOMER,
             'mgr' => User::ROLE_MANAGER,

@@ -21,19 +21,19 @@ class CreateTestTicket extends Command
      *
      * @var string
      */
-    protected $description = 'Create a test ticket assigned to an employee';
+    protected $description = 'Create a test ticket assigned to a technician';
 
     /**
      * Execute the console command.
      */
     public function handle()
     {
-        $employee = User::where('role', 'staff')->first();
+        $employee = User::where('role', 'technician')->first();
         $customer = User::where('role', 'customer')->first();
         $status = TicketStatus::where('name', 'Pending')->first();
 
         if (!$employee) {
-            $this->error('No staff/employee found in database');
+            $this->error('No technician found in database');
             return Command::FAILURE;
         }
 
@@ -49,8 +49,8 @@ class CreateTestTicket extends Command
 
         $ticket = Ticket::create([
             'ticket_id' => 'TEST-' . time(),
-            'title' => 'Test Employee Ticket',
-            'description' => 'This is a test ticket assigned to an employee to verify the API works correctly',
+            'title' => 'Test Technician Ticket',
+            'description' => 'This is a test ticket assigned to a technician to verify the API works correctly',
             'service_type' => 'Maintenance',
             'address' => '123 Test Street, Test City',
             'contact' => '123-456-7890',
@@ -61,7 +61,7 @@ class CreateTestTicket extends Command
         ]);
 
         $this->info("Created test ticket: {$ticket->ticket_id}");
-        $this->info("Assigned to employee: {$employee->username} ({$employee->email})");
+        $this->info("Assigned to technician: {$employee->username} ({$employee->email})");
         $this->info("Customer: {$customer->username} ({$customer->email})");
         $this->info("Status: {$status->name}");
 

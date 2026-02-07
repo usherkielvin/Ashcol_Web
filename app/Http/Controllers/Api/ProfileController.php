@@ -226,7 +226,7 @@ class ProfileController extends Controller
             if ($user->role === 'admin') {
                 // Admin can see all employees
                 $employees = DB::table('users')
-                    ->whereIn('role', ['employee', 'staff', 'manager'])
+                    ->whereIn('role', ['technician', 'manager'])
                     ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
                     ->orderBy('branch')
                     ->orderBy('firstName')
@@ -276,7 +276,7 @@ class ProfileController extends Controller
 
                 // Get employees with the same branch name
                 $employees = DB::table('users')
-                    ->whereIn('role', ['employee', 'staff'])
+                    ->whereIn('role', ['technician'])
                     ->where('branch', $managerBranch)
                     ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
                     ->get();
@@ -352,7 +352,7 @@ class ProfileController extends Controller
 
             // Get employees for the specified branch
             $employees = DB::table('users')
-                ->whereIn('role', ['employee', 'staff', 'manager'])
+                ->whereIn('role', ['technician', 'manager'])
                 ->where('branch', $branchName)
                 ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
                 ->orderBy('firstName')
@@ -480,7 +480,7 @@ class ProfileController extends Controller
             foreach ($branches as $branch) {
                 // Count employees for this branch
                 $employeeCount = DB::table('users')
-                    ->whereIn('role', ['employee', 'staff', 'manager'])
+                    ->whereIn('role', ['technician'])
                     ->where('branch', $branch->name)
                     ->count();
 

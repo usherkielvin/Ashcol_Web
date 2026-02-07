@@ -31,8 +31,8 @@
 
 
 
-                        @if(auth()->user()->isAdminOrStaff())
-                            <!-- Customer Selection (Admin/Staff only) -->
+                        @if(auth()->user()->isAdminOrTechnician())
+                            <!-- Customer Selection (Admin/Technician only) -->
                             <div class="mb-4">
                                 <x-input-label for="customer_id" value="{{ __('Customer') }}" />
                                 <select id="customer_id" name="customer_id" 
@@ -47,9 +47,9 @@
                                 <x-input-error :messages="$errors->get('customer_id')" class="mt-2" />
                             </div>
 
-                            <!-- Staff Assignment (Admin/Staff only) -->
+                            <!-- Technician Assignment (Admin/Technician only) -->
                             <div class="mb-4">
-                                <x-input-label for="assigned_staff_id" value="{{ __('Assign to Staff') }}" />
+                                <x-input-label for="assigned_staff_id" value="{{ __('Assign to Technician') }}" />
                                 <select id="assigned_staff_id" name="assigned_staff_id" 
                                     class="block mt-1 w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm">
                                     <option value="">{{ __('Unassigned') }}</option>
@@ -62,7 +62,7 @@
                                 <x-input-error :messages="$errors->get('assigned_staff_id')" class="mt-2" />
                             </div>
 
-                            <!-- Status (Admin/Staff only) -->
+                            <!-- Status (Admin/Technician only) -->
                             <div class="mb-4">
                                 <x-input-label for="status_id" value="{{ __('Status') }}" />
                                 <select id="status_id" name="status_id" 

@@ -32,8 +32,8 @@ class StoreTicketRequest extends FormRequest
 
         ];
 
-        // Admin and staff can assign customer and staff
-        if ($user->isAdminOrStaff()) {
+        // Admin and technician can assign customer and technician
+        if ($user->isAdminOrTechnician()) {
             $rules['customer_id'] = ['nullable', 'exists:users,id'];
             $rules['assigned_staff_id'] = ['nullable', 'exists:users,id'];
             $rules['status_id'] = ['nullable', 'exists:ticket_statuses,id'];

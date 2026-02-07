@@ -43,8 +43,8 @@ class TicketCommentController extends Controller
         $user = auth()->user();
         $ticket = $ticketComment->ticket;
 
-        // Users can only delete their own comments, or admin/staff can delete any
-        if ($ticketComment->user_id !== $user->id && !$user->isAdminOrStaff()) {
+        // Users can only delete their own comments, or admin/technician can delete any
+        if ($ticketComment->user_id !== $user->id && !$user->isAdminOrTechnician()) {
             abort(403, 'Unauthorized action.');
         }
 
