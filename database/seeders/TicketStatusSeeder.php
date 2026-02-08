@@ -24,6 +24,11 @@ class TicketStatusSeeder extends Seeder
                 'is_default' => false,
             ],
             [
+                'name' => 'Scheduled',
+                'color' => '#6366F1', // Indigo
+                'is_default' => false,
+            ],
+            [
                 'name' => 'Accepted',
                 'color' => '#3B82F6', // Blue
                 'is_default' => false,
@@ -56,7 +61,10 @@ class TicketStatusSeeder extends Seeder
         ];
 
         foreach ($statuses as $status) {
-            TicketStatus::create($status);
+            TicketStatus::updateOrCreate(
+                ['name' => $status['name']],
+                $status
+            );
         }
     }
 }

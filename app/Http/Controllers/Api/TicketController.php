@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 use App\Services\FirestoreService;
 use App\Services\FirebaseService;
 
@@ -377,9 +378,17 @@ class TicketController extends Controller
             ], 400);
         }
         
-        // When a technician is assigned, move ticket out of Pending into an ongoing state.
-        // We use the existing "In Progress" status from TicketStatusSeeder.
+        // When a technician is assigned, set status based on schedule date.
+        // Future dates -> Scheduled, today/past -> In Progress.
+        $scheduledDate = Carbon::parse($validated['scheduled_date'])->startOfDay();
+        $today = Carbon::now()->startOfDay();
+
+        $scheduledStatus = TicketStatus::where('name', 'Scheduled')->first();
         $inProgressStatus = TicketStatus::where('name', 'In Progress')->first();
+
+        $nextStatus = $scheduledDate->greaterThan($today)
+            ? ($scheduledStatus ?? $inProgressStatus)
+            : $inProgressStatus;
 
         $updateData = [
             'scheduled_date' => $validated['scheduled_date'],
@@ -388,8 +397,8 @@ class TicketController extends Controller
             'assigned_staff_id' => $validated['assigned_staff_id'],
         ];
 
-        if ($inProgressStatus) {
-            $updateData['status_id'] = $inProgressStatus->id;
+        if ($nextStatus) {
+            $updateData['status_id'] = $nextStatus->id;
         }
 
         try {
@@ -443,7 +452,7 @@ class TicketController extends Controller
                 ]);
             }
             
-            Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to technician {$staff->id} (status set to In Progress)", [
+            Log::info("Ticket {$ticket->ticket_id} schedule set by user {$user->id} and assigned to technician {$staff->id} (status set to " . ($ticket->status->name ?? 'Unknown') . ")", [
                 'ticket_id' => $ticket->ticket_id,
                 'assigned_staff_id' => $staff->id,
                 'assigned_staff_name' => trim(($staff->firstName ?? '') . ' ' . ($staff->lastName ?? '')),
@@ -772,6 +781,41 @@ class TicketController extends Controller
             ->orderBy('scheduled_time', 'asc')
             ->orderBy('created_at', 'desc')
             ->get();
+
+        // Auto-transition Scheduled -> In Progress when the scheduled date is today
+        $scheduledStatus = TicketStatus::where('name', 'Scheduled')->first();
+        $inProgressStatus = TicketStatus::where('name', 'In Progress')->first();
+        if ($scheduledStatus && $inProgressStatus) {
+            $today = Carbon::now()->toDateString();
+            $firestoreService = new FirestoreService();
+
+            foreach ($tickets as $ticket) {
+                $scheduledDateValue = $ticket->scheduled_date ? Carbon::parse($ticket->scheduled_date)->format('Y-m-d') : null;
+                if ($ticket->status_id === $scheduledStatus->id
+                        && $scheduledDateValue
+                        && $scheduledDateValue === $today) {
+                    $ticket->status_id = $inProgressStatus->id;
+                    $ticket->save();
+                    $ticket->setRelation('status', $inProgressStatus);
+
+                    // Best-effort Firestore sync
+                    try {
+                        if ($firestoreService->isAvailable()) {
+                            $firestoreService->database()
+                                ->collection('tickets')
+                                ->document($ticket->ticket_id)
+                                ->set([
+                                    'status' => $inProgressStatus->name,
+                                    'statusColor' => $inProgressStatus->color ?? '#gray',
+                                    'updatedAt' => new \DateTime(),
+                                ], ['merge' => true]);
+                        }
+                    } catch (\Exception $e) {
+                        Log::warning('Firestore sync failed in getEmployeeTickets auto-transition: ' . $e->getMessage());
+                    }
+                }
+            }
+        }
         
         Log::info("Found technician tickets", [
             'user_id' => $user->id,
