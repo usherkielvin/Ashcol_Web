@@ -95,7 +95,8 @@ class TicketController extends Controller
                     'address' => $ticket->address,
                     'contact' => $ticket->contact,
                     'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
-
+                    'latitude' => $ticket->customer->latitude ?? 0,
+                    'longitude' => $ticket->customer->longitude ?? 0,
                     'status' => $ticket->status->name ?? 'Unknown',
                     'status_color' => $ticket->status->color ?? '#gray',
                     'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
