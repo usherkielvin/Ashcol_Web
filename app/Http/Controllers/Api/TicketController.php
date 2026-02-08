@@ -96,7 +96,8 @@ class TicketController extends Controller
                     'address' => $ticket->address,
                     'contact' => $ticket->contact,
                     'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
-
+                    'latitude' => $ticket->customer->latitude ?? 0,
+                    'longitude' => $ticket->customer->longitude ?? 0,
                     'status' => $ticket->status->name ?? 'Unknown',
                     'status_color' => $ticket->status->color ?? '#gray',
                     'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
@@ -604,10 +605,12 @@ class TicketController extends Controller
         $query = Ticket::select([
             'id', 'ticket_id', 'title', 'description', 'service_type', 
             'address', 'contact', 'preferred_date', 
-            'status_id', 'customer_id', 'branch_id', 'created_at', 'updated_at'
+            'status_id', 'customer_id', 'branch_id', 'assigned_staff_id', 'created_at', 'updated_at'
         ])->with([
             'status:id,name,color', // Only load status id, name, color
-            'customer:id,firstName,lastName' // Only load customer id and name fields
+            'customer:id,firstName,lastName', // Only load customer id and name fields
+            'assignedStaff:id,firstName,lastName', // Load assigned staff data
+            'branch:id,name' // Load branch data
         ]);
         
         // Filter by branch_id directly (much faster than whereHas)
@@ -640,8 +643,8 @@ class TicketController extends Controller
                 'status' => $ticket->status->name ?? 'Unknown',
                 'status_color' => $ticket->status->color ?? '#gray',
                 'customer_name' => $customerName,
-                'assigned_staff' => null, // Simplified for now
-                'branch' => null, // Simplified for now
+                'assigned_staff' => $ticket->assignedStaff ? $ticket->assignedStaff->firstName . ' ' . $ticket->assignedStaff->lastName : null,
+                'branch' => $ticket->branch->name ?? null,
                 'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
                 'updated_at' => $ticket->updated_at->format('Y-m-d H:i:s'),
             ];
