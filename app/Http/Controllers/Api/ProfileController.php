@@ -320,6 +320,41 @@ class ProfileController extends Controller
     }
 
     /**
+     * Register FCM token for push notifications
+     */
+    public function registerFCMToken(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated',
+            ], 401);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'fcm_token' => 'required|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $user->fcm_token = $request->input('fcm_token');
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'FCM token saved',
+        ]);
+    }
+
+    /**
      * Get employees for a specific branch (admin only)
      */
     public function getEmployeesByBranch(Request $request)
@@ -566,41 +601,5 @@ class ProfileController extends Controller
     /**
      * Register FCM token for push notifications
      */
-    public function registerFCMToken(Request $request)
-    {
-        try {
-            $validator = Validator::make($request->all(), [
-                'fcm_token' => 'required|string',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'FCM token is required',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            $user = $request->user();
-            $user->fcm_token = $request->fcm_token;
-            $user->save();
-
-            \Log::info('FCM token registered', [
-                'user_id' => $user->id,
-                'token' => substr($request->fcm_token, 0, 20) . '...'
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'FCM token registered successfully',
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Failed to register FCM token: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to register FCM token',
-            ], 500);
-        }
-    }
 }
 

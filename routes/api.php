@@ -67,7 +67,9 @@ Route::prefix('v1')->group(function () {
         
         // Payment routes
         Route::post('/tickets/{ticketId}/complete-work', [TicketController::class, 'completeWorkWithPayment']);
+        Route::get('/payments/by-ticket/{ticketId}', [TicketController::class, 'getPaymentByTicketId']);
         Route::get('/manager/payments', [TicketController::class, 'getPaymentHistory']);
+        Route::post('/payments/{paymentId}/pay', [TicketController::class, 'payCustomerPayment']);
         Route::post('/payments/{paymentId}/submit', [TicketController::class, 'submitPaymentToManager']);
         Route::post('/payments/{paymentId}/complete', [TicketController::class, 'completePayment']);
         

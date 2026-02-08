@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use App\Services\FirestoreService;
+use App\Services\FirebaseService;
 
 class TicketController extends Controller
 {
@@ -979,11 +980,44 @@ class TicketController extends Controller
                             'branch' => $syncedTicket->branch->name ?? null,
                             'updatedAt' => new \DateTime(),
                         ], ['merge' => true]);
+
+                    if ($payment->payment_method === 'online') {
+                        $firestoreService->database()
+                            ->collection('payments')
+                            ->document((string) $payment->id)
+                            ->set([
+                                'paymentId' => $payment->id,
+                                'ticketId' => $ticket->ticket_id,
+                                'customerEmail' => $ticket->customer->email ?? null,
+                                'serviceName' => $ticket->service_type,
+                                'technicianName' => $user->firstName . ' ' . $user->lastName,
+                                'amount' => $payment->amount,
+                                'status' => $payment->status,
+                                'createdAt' => new \DateTime(),
+                                'updatedAt' => new \DateTime(),
+                            ], ['merge' => true]);
+                    }
                     
                     Log::info("Ticket {$syncedTicket->ticket_id} synced to Firestore successfully after completion");
                 }
             } catch (\Exception $e) {
                 Log::error('Firestore sync failed in completeWorkWithPayment: ' . $e->getMessage());
+            }
+
+            // Notify customer for online payments
+            if ($payment->payment_method === 'online' && $ticket->customer && $ticket->customer->fcm_token) {
+                $firebaseService = new FirebaseService();
+                $firebaseService->sendNotification(
+                    $ticket->customer->fcm_token,
+                    'Payment Required',
+                    "Ticket {$ticket->ticket_id} is ready for payment.",
+                    [
+                        'type' => 'payment_pending',
+                        'ticket_id' => $ticket->ticket_id,
+                        'payment_id' => (string) $payment->id,
+                        'action' => 'open_payment'
+                    ]
+                );
             }
 
             Log::info("Work completed with payment", [
@@ -1023,6 +1057,79 @@ class TicketController extends Controller
                 'message' => 'Failed to complete work: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Get payment history (for managers)
+     */
+    public function getPaymentByTicketId(Request $request, $ticketId)
+    {
+        $user = $request->user();
+
+        $ticket = Ticket::with(['customer', 'assignedStaff', 'branch'])
+            ->where('ticket_id', $ticketId)
+            ->first();
+
+        if (!$ticket) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Ticket not found',
+            ], 404);
+        }
+
+        // Authorization: customer owns ticket, technician assigned, manager branch, admin ok
+        if ($user->isCustomer() && $ticket->customer_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to view this payment',
+            ], 403);
+        }
+
+        if ($user->isTechnician() && $ticket->assigned_staff_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to view this payment',
+            ], 403);
+        }
+
+        if (($user->isManager() || $user->isTechnician()) && $user->branch) {
+            if (!$ticket->branch || $ticket->branch->name !== $user->branch) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to view this payment',
+                ], 403);
+            }
+        }
+
+        $payment = Payment::with(['technician', 'customer'])
+            ->where('ticket_id', $ticket->ticket_id)
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$payment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment not found',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'payment' => [
+                'id' => $payment->id,
+                'ticket_id' => $payment->ticket_id,
+                'payment_method' => $payment->payment_method,
+                'amount' => $payment->amount,
+                'status' => $payment->status,
+                'service_name' => $ticket->service_type,
+                'technician_name' => $payment->technician
+                    ? ($payment->technician->firstName . ' ' . $payment->technician->lastName)
+                    : null,
+                'customer_name' => $payment->customer
+                    ? ($payment->customer->firstName . ' ' . $payment->customer->lastName)
+                    : null,
+            ],
+        ]);
     }
 
     /**
@@ -1073,6 +1180,73 @@ class TicketController extends Controller
                     'created_at' => $payment->created_at->format('Y-m-d H:i:s'),
                 ];
             }),
+        ]);
+    }
+
+    /**
+     * Customer completes online payment
+     */
+    public function payCustomerPayment(Request $request, $paymentId)
+    {
+        $user = $request->user();
+
+        if (!$user->isCustomer() && !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to complete payment',
+            ], 403);
+        }
+
+        $payment = Payment::with(['ticket', 'customer', 'technician'])->find($paymentId);
+        if (!$payment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment not found',
+            ], 404);
+        }
+
+        if ($user->isCustomer() && $payment->customer_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to complete this payment',
+            ], 403);
+        }
+
+        if ($payment->status !== 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment is not pending',
+            ], 400);
+        }
+
+        $payment->update([
+            'status' => 'completed',
+            'completed_at' => now(),
+        ]);
+
+        try {
+            $firestoreService = new FirestoreService();
+            if ($firestoreService->isAvailable()) {
+                $firestoreService->database()
+                    ->collection('payments')
+                    ->document((string) $payment->id)
+                    ->set([
+                        'status' => $payment->status,
+                        'updatedAt' => new \DateTime(),
+                    ], ['merge' => true]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Firestore sync failed in payCustomerPayment: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment completed successfully',
+            'payment' => [
+                'id' => $payment->id,
+                'status' => $payment->status,
+                'completed_at' => $payment->completed_at?->format('Y-m-d H:i:s'),
+            ],
         ]);
     }
 

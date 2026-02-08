@@ -40,6 +40,7 @@ class User extends Authenticatable
         'city',
         'branch',
         'profile_photo',
+        'fcm_token',
         // facebook_id is now stored in facebook_accounts table, not here
     ];
 
