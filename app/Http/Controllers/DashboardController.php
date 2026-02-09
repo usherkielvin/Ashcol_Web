@@ -85,7 +85,7 @@ class DashboardController extends Controller
             ->groupBy('status_id');
 
         // Pending updates (tickets that need attention)
-        $pendingStatusIds = TicketStatus::whereIn('name', ['Open', 'In Progress', 'Pending'])->pluck('id');
+        $pendingStatusIds = TicketStatus::whereIn('name', ['Pending', 'Scheduled', 'Ongoing'])->pluck('id');
         $pendingUpdates = Ticket::where('assigned_staff_id', $user->id)
             ->whereIn('status_id', $pendingStatusIds)
             ->with(['customer', 'status'])
@@ -132,10 +132,10 @@ class DashboardController extends Controller
         // Statistics
         $stats = [
             'total' => $tickets->count(),
-            'open' => $tickets->where('status.name', 'Open')->count(),
-            'in_progress' => $tickets->where('status.name', 'In Progress')->count(),
-            'resolved' => $tickets->where('status.name', 'Resolved')->count(),
-            'closed' => $tickets->where('status.name', 'Closed')->count(),
+            'open' => $tickets->whereIn('status.name', ['Pending', 'Scheduled'])->count(),
+            'in_progress' => $tickets->where('status.name', 'Ongoing')->count(),
+            'resolved' => $tickets->where('status.name', 'Completed')->count(),
+            'closed' => $tickets->where('status.name', 'Cancelled')->count(),
         ];
 
         // Recent tickets

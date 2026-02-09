@@ -203,7 +203,7 @@ class TicketController extends Controller
         }
         
         $validated = $request->validate([
-            'status' => 'required|string|in:open,pending,accepted,in_progress,completed,cancelled,resolved,closed',
+            'status' => 'required|string|in:pending,scheduled,ongoing,completed,cancelled,open,accepted,in_progress,resolved,closed',
             'assigned_staff_id' => 'nullable|exists:users,id',
         ]);
         
@@ -238,14 +238,16 @@ class TicketController extends Controller
         
         // Find status by name
         $statusMap = [
-            'open' => 'Open',
+            'open' => 'Pending',
             'pending' => 'Pending',
-            'accepted' => 'Accepted',
-            'in_progress' => 'In Progress',
+            'scheduled' => 'Scheduled',
+            'accepted' => 'Ongoing',
+            'in_progress' => 'Ongoing',
+            'ongoing' => 'Ongoing',
             'completed' => 'Completed',
+            'resolved' => 'Completed',
+            'closed' => 'Completed',
             'cancelled' => 'Cancelled',
-            'resolved' => 'Resolved',
-            'closed' => 'Closed',
         ];
         
         $statusName = $statusMap[$validated['status']] ?? 'Pending';
@@ -380,12 +382,12 @@ class TicketController extends Controller
         }
         
         // When a technician is assigned, set status based on schedule date.
-        // Future dates -> Scheduled, today/past -> In Progress.
+        // Future dates -> Scheduled, today/past -> Ongoing.
         $scheduledDate = Carbon::parse($validated['scheduled_date'])->startOfDay();
         $today = Carbon::now()->startOfDay();
 
         $scheduledStatus = TicketStatus::where('name', 'Scheduled')->first();
-        $inProgressStatus = TicketStatus::where('name', 'In Progress')->first();
+        $inProgressStatus = TicketStatus::where('name', 'Ongoing')->first();
 
         $nextStatus = $scheduledDate->greaterThan($today)
             ? ($scheduledStatus ?? $inProgressStatus)
@@ -471,7 +473,7 @@ class TicketController extends Controller
                     'schedule_notes' => $ticket->schedule_notes,
                     'assigned_staff' => trim(($staff->firstName ?? '') . ' ' . ($staff->lastName ?? '')),
                     'assigned_staff_id' => $staff->id,
-                    'status' => $ticket->status->name ?? 'In Progress',
+                    'status' => $ticket->status->name ?? 'Ongoing',
                 ],
             ]);
         } catch (\Exception $e) {
@@ -716,10 +718,13 @@ class TicketController extends Controller
             $statusFilter = strtolower($statusFilter);
             // Map common status names
             $statusMap = [
-                'pending' => ['Pending', 'pending', 'open', 'Open'],
-                // Treat "in progress", "accepted", and "ongoing" as the same bucket
-                'in_progress' => ['In Progress', 'in progress', 'accepted', 'Accepted', 'ongoing', 'Ongoing'],
+                'pending' => ['Pending', 'pending', 'open', 'Open', 'scheduled', 'Scheduled'],
+                'scheduled' => ['Scheduled', 'scheduled'],
+                // Treat "ongoing", "in progress", and "accepted" as the same bucket
+                'ongoing' => ['Ongoing', 'ongoing', 'In Progress', 'in progress', 'accepted', 'Accepted'],
+                'in_progress' => ['Ongoing', 'ongoing', 'In Progress', 'in progress', 'accepted', 'Accepted'],
                 'completed' => ['Completed', 'completed', 'resolved', 'Resolved', 'closed', 'Closed'],
+                'cancelled' => ['Cancelled', 'cancelled', 'Rejected', 'rejected', 'failed', 'Failed'],
             ];
             
             // Filter application moved to after query initialization
@@ -755,8 +760,10 @@ class TicketController extends Controller
         if ($statusFilter) {
             $statusFilter = strtolower($statusFilter);
             $statusMap = [
-                'pending' => ['Pending', 'pending', 'open', 'Open'],
-                'in_progress' => ['In Progress', 'in progress', 'accepted', 'Accepted', 'ongoing', 'Ongoing'],
+                'pending' => ['Pending', 'pending', 'open', 'Open', 'scheduled', 'Scheduled'],
+                'scheduled' => ['Scheduled', 'scheduled'],
+                'ongoing' => ['Ongoing', 'ongoing', 'In Progress', 'in progress', 'accepted', 'Accepted'],
+                'in_progress' => ['Ongoing', 'ongoing', 'In Progress', 'in progress', 'accepted', 'Accepted'],
                 'completed' => ['Completed', 'completed', 'resolved', 'Resolved', 'closed', 'Closed'],
                 'cancelled' => ['Cancelled', 'cancelled', 'Rejected', 'rejected', 'failed', 'Failed'],
             ];
@@ -785,9 +792,9 @@ class TicketController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // Auto-transition Scheduled -> In Progress when the scheduled date is today
+        // Auto-transition Scheduled -> Ongoing when the scheduled date is today
         $scheduledStatus = TicketStatus::where('name', 'Scheduled')->first();
-        $inProgressStatus = TicketStatus::where('name', 'In Progress')->first();
+        $inProgressStatus = TicketStatus::where('name', 'Ongoing')->first();
         if ($scheduledStatus && $inProgressStatus) {
             $today = Carbon::now()->toDateString();
             $firestoreService = new FirestoreService();
@@ -1477,11 +1484,11 @@ class TicketController extends Controller
             'total_tickets' => $allTickets->count(),
             'pending' => $allTickets->filter(function ($ticket) {
                 $status = strtolower($ticket->status->name ?? '');
-                return in_array($status, ['pending', 'open']);
+                return in_array($status, ['pending', 'scheduled', 'open']);
             })->count(),
             'in_progress' => $allTickets->filter(function ($ticket) {
                 $status = strtolower($ticket->status->name ?? '');
-                return in_array($status, ['in progress', 'accepted', 'ongoing']);
+                return in_array($status, ['ongoing', 'in progress', 'accepted']);
             })->count(),
             'completed' => $allTickets->filter(function ($ticket) {
                 $status = strtolower($ticket->status->name ?? '');

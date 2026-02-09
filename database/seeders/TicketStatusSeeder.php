@@ -14,14 +14,9 @@ class TicketStatusSeeder extends Seeder
     {
         $statuses = [
             [
-                'name' => 'Open',
-                'color' => '#10B981', // Green
-                'is_default' => true,
-            ],
-            [
                 'name' => 'Pending',
                 'color' => '#F59E0B', // Orange
-                'is_default' => false,
+                'is_default' => true,
             ],
             [
                 'name' => 'Scheduled',
@@ -29,12 +24,7 @@ class TicketStatusSeeder extends Seeder
                 'is_default' => false,
             ],
             [
-                'name' => 'Accepted',
-                'color' => '#3B82F6', // Blue
-                'is_default' => false,
-            ],
-            [
-                'name' => 'In Progress',
+                'name' => 'Ongoing',
                 'color' => '#3B82F6', // Blue
                 'is_default' => false,
             ],
@@ -46,16 +36,6 @@ class TicketStatusSeeder extends Seeder
             [
                 'name' => 'Cancelled',
                 'color' => '#EF4444', // Red
-                'is_default' => false,
-            ],
-            [
-                'name' => 'Resolved',
-                'color' => '#6B7280', // Gray
-                'is_default' => false,
-            ],
-            [
-                'name' => 'Closed',
-                'color' => '#1F2937', // Dark Gray
                 'is_default' => false,
             ],
         ];

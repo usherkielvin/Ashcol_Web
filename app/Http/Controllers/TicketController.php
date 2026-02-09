@@ -126,10 +126,10 @@ class TicketController extends Controller
                     if ($firstStatus) {
                         $data['status_id'] = $firstStatus->id;
                     } else {
-                        // Auto-create a default "Open" status if none exists
+                        // Auto-create a default "Pending" status if none exists
                         $defaultStatus = TicketStatus::create([
-                            'name' => 'Open',
-                            'color' => '#10B981',
+                            'name' => 'Pending',
+                            'color' => '#F59E0B',
                             'is_default' => true,
                         ]);
                         $data['status_id'] = $defaultStatus->id;
@@ -322,7 +322,15 @@ class TicketController extends Controller
             // Customers can only create tickets for themselves
             if ($user->isCustomer()) {
                 $data['customer_id'] = $user->id;
-                $data['status_id'] = TicketStatus::getDefault()->id;
+                $defaultStatus = TicketStatus::getDefault();
+                if ($defaultStatus) {
+                    $data['status_id'] = $defaultStatus->id;
+                } else {
+                    $pendingStatus = TicketStatus::where('name', 'Pending')->first();
+                    if ($pendingStatus) {
+                        $data['status_id'] = $pendingStatus->id;
+                    }
+                }
 
                 // Branch Assignment Logic for Web Customer
                 $branchName = $user->branch;

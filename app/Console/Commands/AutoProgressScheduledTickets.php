@@ -24,7 +24,7 @@ class AutoProgressScheduledTickets extends Command
      *
      * @var string
      */
-    protected $description = 'Move Scheduled tickets to In Progress when the scheduled date is today or earlier';
+    protected $description = 'Move Scheduled tickets to Ongoing when the scheduled date is today or earlier';
 
     /**
      * Execute the console command.
@@ -35,10 +35,10 @@ class AutoProgressScheduledTickets extends Command
         $today = $dateOverride ? Carbon::parse($dateOverride)->toDateString() : Carbon::today()->toDateString();
 
         $scheduledStatus = TicketStatus::where('name', 'Scheduled')->first();
-        $inProgressStatus = TicketStatus::where('name', 'In Progress')->first();
+        $inProgressStatus = TicketStatus::where('name', 'Ongoing')->first();
 
         if (! $scheduledStatus || ! $inProgressStatus) {
-            $this->error('Missing TicketStatus records for Scheduled or In Progress.');
+            $this->error('Missing TicketStatus records for Scheduled or Ongoing.');
             return Command::FAILURE;
         }
 
@@ -80,7 +80,7 @@ class AutoProgressScheduledTickets extends Command
             }
         });
 
-        $this->info("Auto-progressed {$updated} ticket(s) to In Progress.");
+        $this->info("Auto-progressed {$updated} ticket(s) to Ongoing.");
         return Command::SUCCESS;
     }
 }
