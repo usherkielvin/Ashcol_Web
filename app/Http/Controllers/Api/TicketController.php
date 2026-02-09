@@ -994,6 +994,8 @@ class TicketController extends Controller
                     ->first();
             }
             
+            $isCash = $validated['payment_method'] === 'cash';
+
             // Create payment record
             $payment = Payment::create([
                 'ticket_id' => $ticket->ticket_id,
@@ -1003,9 +1005,10 @@ class TicketController extends Controller
                 'manager_id' => $manager?->id,
                 'payment_method' => $validated['payment_method'],
                 'amount' => $validated['amount'],
-                'status' => $validated['payment_method'] === 'cash' ? 'collected' : 'pending', // Cash is collected immediately
+                'status' => $isCash ? 'completed' : 'pending',
                 'notes' => $validated['notes'] ?? null,
-                'collected_at' => $validated['payment_method'] === 'cash' ? now() : null,
+                'collected_at' => $isCash ? now() : null,
+                'completed_at' => $isCash ? now() : null,
             ]);
             
             // Clear caches
@@ -1041,22 +1044,20 @@ class TicketController extends Controller
                             'updatedAt' => new \DateTime(),
                         ], ['merge' => true]);
 
-                    if ($payment->payment_method === 'online') {
-                        $firestoreService->database()
-                            ->collection('payments')
-                            ->document((string) $payment->id)
-                            ->set([
-                                'paymentId' => $payment->id,
-                                'ticketId' => $ticket->ticket_id,
-                                'customerEmail' => $ticket->customer->email ?? null,
-                                'serviceName' => $ticket->service_type,
-                                'technicianName' => $user->firstName . ' ' . $user->lastName,
-                                'amount' => $payment->amount,
-                                'status' => $payment->status,
-                                'createdAt' => new \DateTime(),
-                                'updatedAt' => new \DateTime(),
-                            ], ['merge' => true]);
-                    }
+                    $firestoreService->database()
+                        ->collection('payments')
+                        ->document((string) $payment->id)
+                        ->set([
+                            'paymentId' => $payment->id,
+                            'ticketId' => $ticket->ticket_id,
+                            'customerEmail' => $ticket->customer->email ?? null,
+                            'serviceName' => $ticket->service_type,
+                            'technicianName' => $user->firstName . ' ' . $user->lastName,
+                            'amount' => $payment->amount,
+                            'status' => $payment->status,
+                            'createdAt' => new \DateTime(),
+                            'updatedAt' => new \DateTime(),
+                        ], ['merge' => true]);
                     
                     Log::info("Ticket {$syncedTicket->ticket_id} synced to Firestore successfully after completion");
                 }
