@@ -109,7 +109,6 @@ class TicketController extends Controller
             $data = $validated;
             unset($data['image']); // Don't pass uploaded file to create
             $data['preferred_date'] = !empty($validated['preferred_date']) ? $validated['preferred_date'] : null;
-            $data['priority'] = Ticket::PRIORITY_MEDIUM; // Force default
             $data['customer_id'] = $user->id;
 
             // Always try to start customer tickets in a clear "Pending" state so
@@ -317,7 +316,6 @@ class TicketController extends Controller
 
             $data = $validated;
             $data['ticket_id'] = Ticket::generateTicketId(); // Generate unique ticket ID
-            $data['priority'] = Ticket::PRIORITY_MEDIUM; // Force default
 
             // Customers can only create tickets for themselves
             if ($user->isCustomer()) {

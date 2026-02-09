@@ -54,7 +54,6 @@ class CreateTestTicket extends Command
             'service_type' => 'Maintenance',
             'address' => '123 Test Street, Test City',
             'contact' => '123-456-7890',
-            'priority' => 'medium',
             'customer_id' => $customer->id,
             'assigned_staff_id' => $employee->id,
             'status_id' => $status->id,

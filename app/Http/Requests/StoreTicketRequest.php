@@ -52,7 +52,6 @@ class StoreTicketRequest extends FormRequest
         return [
             'title.required' => 'The ticket title is required.',
             'description.required' => 'The ticket description is required.',
-            'priority.required' => 'Please select a priority level.',
         ];
     }
 }

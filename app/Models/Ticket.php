@@ -19,7 +19,6 @@ class Ticket extends Model
         'assigned_staff_id',
         'status_id',
         'branch_id',
-        'priority',
         'address',
         'contact',
         'service_type',
@@ -41,13 +40,6 @@ class Ticket extends Model
         'scheduled_date' => 'date',
     ];
 
-    /**
-     * Priority options
-     */
-    const PRIORITY_LOW = 'low';
-    const PRIORITY_MEDIUM = 'medium';
-    const PRIORITY_HIGH = 'high';
-    const PRIORITY_URGENT = 'urgent';
 
     /**
      * Get the customer who created the ticket
@@ -109,18 +101,5 @@ class Ticket extends Model
         return !is_null($this->assigned_staff_id);
     }
 
-    /**
-     * Get priority badge color
-     */
-    public function getPriorityColor(): string
-    {
-        return match($this->priority) {
-            self::PRIORITY_LOW => 'gray',
-            self::PRIORITY_MEDIUM => 'blue',
-            self::PRIORITY_HIGH => 'orange',
-            self::PRIORITY_URGENT => 'red',
-            default => 'gray',
-        };
-    }
 }
 
