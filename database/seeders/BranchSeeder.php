@@ -14,6 +14,30 @@ class BranchSeeder extends Seeder
     {
         $branches = [
             [
+                'name' => 'ASHCOL - CALAUAN LAGUNA',
+                'location' => 'Calauan, Laguna',
+                'address' => 'Purok 4 Kalye Pogi, Brgy. Bangyas, Calauan, Laguna',
+                'latitude' => null,
+                'longitude' => null,
+                'is_active' => true,
+            ],
+            [
+                'name' => 'ASHCOL - STA ROSA - TAGAYTAY RD BATANGAS',
+                'location' => 'Silang, Cavite',
+                'address' => '2nd Flr Rheayanell Bldg., 9015 Pandan St., Sta. Rosa - Tagaytay Road, Brgy. Puting Kahoy, Silang, Cavite',
+                'latitude' => null,
+                'longitude' => null,
+                'is_active' => true,
+            ],
+            [
+                'name' => 'ASHCOL - PAMPANGA',
+                'location' => 'San Fernando, Pampanga',
+                'address' => '202 CityCorp Business Center, San Isidro, City of San Fernando, Pampanga',
+                'latitude' => null,
+                'longitude' => null,
+                'is_active' => true,
+            ],
+            [
                 'name' => 'ASHCOL TAGUIG',
                 'location' => 'Taguig City',
                 'address' => 'Bonifacio Global City, Taguig, Metro Manila',
