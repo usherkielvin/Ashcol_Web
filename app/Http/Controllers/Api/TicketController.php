@@ -386,8 +386,14 @@ class TicketController extends Controller
         $scheduledDate = Carbon::parse($validated['scheduled_date'])->startOfDay();
         $today = Carbon::now()->startOfDay();
 
-        $scheduledStatus = TicketStatus::where('name', 'Scheduled')->first();
-        $inProgressStatus = TicketStatus::where('name', 'Ongoing')->first();
+        $scheduledStatus = TicketStatus::firstOrCreate(
+            ['name' => 'Scheduled'],
+            ['color' => '#6366F1', 'is_default' => false]
+        );
+        $inProgressStatus = TicketStatus::firstOrCreate(
+            ['name' => 'Ongoing'],
+            ['color' => '#3B82F6', 'is_default' => false]
+        );
 
         $nextStatus = $scheduledDate->greaterThan($today)
             ? ($scheduledStatus ?? $inProgressStatus)
