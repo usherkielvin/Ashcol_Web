@@ -93,6 +93,7 @@ class TicketController extends Controller
                     'title' => $ticket->title,
                     'description' => $ticket->description,
                     'service_type' => $ticket->service_type,
+                    'amount' => $ticket->amount,
                     'address' => $ticket->address,
                     'contact' => $ticket->contact,
                     'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
@@ -159,6 +160,7 @@ class TicketController extends Controller
                 'title' => $ticket->title,
                 'description' => $ticket->description,
                 'service_type' => $ticket->service_type,
+                'amount' => $ticket->amount,
                 'address' => $ticket->address,
                 'contact' => $ticket->contact,
                 'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
@@ -316,6 +318,7 @@ class TicketController extends Controller
                     'statusDetail' => $syncedTicket->status_detail,
                     'statusColor' => $syncedTicket->status->color ?? '#gray',
                     'serviceType' => $syncedTicket->service_type,
+                    'amount' => $syncedTicket->amount,
                     'description' => $syncedTicket->description,
                     'scheduledDate' => $syncedTicket->scheduled_date,
                     'scheduledTime' => $syncedTicket->scheduled_time,
@@ -455,6 +458,7 @@ class TicketController extends Controller
                         'status' => $syncedTicket->status->name ?? 'Unknown',
                         'statusColor' => $syncedTicket->status->color ?? '#gray',
                         'serviceType' => $syncedTicket->service_type,
+                        'amount' => $syncedTicket->amount,
                         'description' => $syncedTicket->description,
                         'scheduledDate' => $syncedTicket->scheduled_date,
                         'scheduledTime' => $syncedTicket->scheduled_time,
@@ -558,6 +562,7 @@ class TicketController extends Controller
                     'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
                     'address' => $ticket->address,
                     'service_type' => $ticket->service_type,
+                    'amount' => $ticket->amount,
                     'branch' => $ticket->branch->name ?? null,
                 ];
             }),
@@ -636,7 +641,7 @@ class TicketController extends Controller
         // Optimized query - select only needed columns and minimal eager loading
         $query = Ticket::select([
             'id', 'ticket_id', 'title', 'description', 'service_type', 
-            'address', 'contact', 'preferred_date', 
+            'amount', 'address', 'contact', 'preferred_date', 
             'status_id', 'customer_id', 'branch_id', 'assigned_staff_id', 'created_at', 'updated_at'
         ])->with([
             'status:id,name,color', // Only load status id, name, color
@@ -669,6 +674,7 @@ class TicketController extends Controller
                 'title' => $ticket->title ?? '',
                 'description' => $ticket->description ?? '',
                 'service_type' => $ticket->service_type ?? '',
+                'amount' => $ticket->amount,
                 'address' => $ticket->address ?? '',
                 'contact' => $ticket->contact ?? '',
                 'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
@@ -847,6 +853,7 @@ class TicketController extends Controller
                                 ->set([
                                     'status' => $inProgressStatus->name,
                                     'statusColor' => $inProgressStatus->color ?? '#gray',
+                                    'amount' => $ticket->amount,
                                     'updatedAt' => new \DateTime(),
                                 ], ['merge' => true]);
                         }
@@ -1061,6 +1068,7 @@ class TicketController extends Controller
                             'status' => $syncedTicket->status->name ?? 'Unknown',
                             'statusColor' => $syncedTicket->status->color ?? '#gray',
                             'serviceType' => $syncedTicket->service_type,
+                            'amount' => $syncedTicket->amount,
                             'description' => $syncedTicket->description,
                             'scheduledDate' => $syncedTicket->scheduled_date,
                             'scheduledTime' => $syncedTicket->scheduled_time,

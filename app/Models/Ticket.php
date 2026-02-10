@@ -23,6 +23,7 @@ class Ticket extends Model
         'address',
         'contact',
         'service_type',
+        'amount',
         'unit_type',
         'preferred_date',
         'image_path',
@@ -39,6 +40,7 @@ class Ticket extends Model
         'preferred_date' => 'date',
         // Ensure scheduled_date is a date (Carbon) so format() calls in API controllers are safe
         'scheduled_date' => 'date',
+        'amount' => 'decimal:2',
     ];
 
 

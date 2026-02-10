@@ -99,6 +99,7 @@ class TicketController extends Controller
                 'address' => 'required|string|max:255',
                 'contact' => 'required|string|max:255',
                 'service_type' => 'required|string|max:255',
+                'amount' => 'required|numeric|min:0',
                 'unit_type' => 'nullable|string|max:255',
                 'preferred_date' => 'nullable|string|date',
                 'image' => 'nullable|image|mimes:jpg,png,jpeg,gif|max:5120', // 5MB max
@@ -276,6 +277,7 @@ class TicketController extends Controller
                             'status' => $syncedTicket->status->name ?? 'Unknown',
                             'statusColor' => $syncedTicket->status->color ?? '#gray',
                             'serviceType' => $syncedTicket->service_type,
+                            'amount' => $syncedTicket->amount,
                             'description' => $syncedTicket->description,
                             'scheduledDate' => $syncedTicket->scheduled_date,
                             'scheduledTime' => $syncedTicket->scheduled_time,
@@ -303,6 +305,7 @@ class TicketController extends Controller
             $rules = [
                 'title' => ['required', 'string', 'max:255'],
                 'description' => ['required', 'string', 'max:5000'],
+                'amount' => ['nullable', 'numeric', 'min:0'],
             ];
 
             // Admin and technician can assign customer and technician
@@ -383,6 +386,7 @@ class TicketController extends Controller
                             'status' => $syncedTicket->status->name ?? 'Unknown',
                             'statusColor' => $syncedTicket->status->color ?? '#gray',
                             'serviceType' => $syncedTicket->service_type,
+                            'amount' => $syncedTicket->amount,
                             'description' => $syncedTicket->description,
                             'scheduledDate' => $syncedTicket->scheduled_date,
                             'scheduledTime' => $syncedTicket->scheduled_time,
