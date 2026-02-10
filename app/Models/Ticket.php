@@ -18,6 +18,7 @@ class Ticket extends Model
         'customer_id',
         'assigned_staff_id',
         'status_id',
+        'status_detail',
         'branch_id',
         'address',
         'contact',

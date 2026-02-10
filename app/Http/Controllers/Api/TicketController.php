@@ -96,12 +96,17 @@ class TicketController extends Controller
                     'address' => $ticket->address,
                     'contact' => $ticket->contact,
                     'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
+                    'scheduled_date' => $ticket->scheduled_date,
+                    'scheduled_time' => $ticket->scheduled_time,
+                    'schedule_notes' => $ticket->schedule_notes,
                     'latitude' => $ticket->customer->latitude ?? 0,
                     'longitude' => $ticket->customer->longitude ?? 0,
                     'status' => $ticket->status->name ?? 'Unknown',
+                    'status_detail' => $ticket->status_detail,
                     'status_color' => $ticket->status->color ?? '#gray',
                     'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
                     'assigned_staff' => $ticket->assignedStaff ? $ticket->assignedStaff->firstName . ' ' . $ticket->assignedStaff->lastName : null,
+                    'assigned_staff_phone' => $ticket->assignedStaff ? $ticket->assignedStaff->phone : null,
                     'branch' => $ticket->branch->name ?? null,
                     'image_path' => $ticket->image_path,
                     'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
@@ -159,6 +164,7 @@ class TicketController extends Controller
                 'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
 
                 'status' => $ticket->status->name ?? 'Unknown',
+                'status_detail' => $ticket->status_detail,
                 'status_color' => $ticket->status->color ?? '#gray',
                 'customer_name' => $ticket->customer->firstName . ' ' . $ticket->customer->lastName,
                 'assigned_staff' => $ticket->assignedStaff ? $ticket->assignedStaff->firstName . ' ' . $ticket->assignedStaff->lastName : null,
@@ -204,6 +210,7 @@ class TicketController extends Controller
         
         $validated = $request->validate([
             'status' => 'required|string|in:pending,scheduled,ongoing,completed,cancelled,open,accepted,in_progress,resolved,closed',
+            'status_detail' => 'nullable|string|max:50',
             'assigned_staff_id' => 'nullable|exists:users,id',
         ]);
         
@@ -261,6 +268,13 @@ class TicketController extends Controller
         }
         
         $updateData = ['status_id' => $status->id];
+        $statusDetail = $validated['status_detail'] ?? null;
+        if ($statusName === 'Completed' && (!$statusDetail || trim($statusDetail) === '')) {
+            $statusDetail = 'completed';
+        }
+        if ($statusDetail !== null) {
+            $updateData['status_detail'] = $statusDetail;
+        }
         
         // If assigning technician, validate they belong to the same branch
         if (isset($validated['assigned_staff_id'])) {
@@ -294,7 +308,12 @@ class TicketController extends Controller
                     'customerId' => $syncedTicket->customer_id,
                     'customerEmail' => $syncedTicket->customer->email ?? null,
                     'assignedTo' => $syncedTicket->assigned_staff_id,
+                    'assigned_staff' => $syncedTicket->assignedStaff
+                        ? trim(($syncedTicket->assignedStaff->firstName ?? '') . ' ' . ($syncedTicket->assignedStaff->lastName ?? ''))
+                        : null,
+                    'assigned_staff_email' => $syncedTicket->assignedStaff->email ?? null,
                     'status' => $syncedTicket->status->name ?? 'Unknown',
+                    'statusDetail' => $syncedTicket->status_detail,
                     'statusColor' => $syncedTicket->status->color ?? '#gray',
                     'serviceType' => $syncedTicket->service_type,
                     'description' => $syncedTicket->description,
@@ -315,6 +334,7 @@ class TicketController extends Controller
             'ticket' => [
                 'ticket_id' => $ticket->ticket_id,
                 'status' => $status->name,
+                'status_detail' => $ticket->status_detail,
                 'status_color' => $status->color,
                 'assigned_staff' => $ticket->assignedStaff ? $ticket->assignedStaff->firstName . ' ' . $ticket->assignedStaff->lastName : null,
                 'scheduled_date' => $ticket->scheduled_date,
@@ -428,6 +448,10 @@ class TicketController extends Controller
                         'customerId' => $syncedTicket->customer_id,
                         'customerEmail' => $syncedTicket->customer->email ?? null,
                         'assignedTo' => $syncedTicket->assigned_staff_id,
+                        'assigned_staff' => $syncedTicket->assignedStaff
+                            ? trim(($syncedTicket->assignedStaff->firstName ?? '') . ' ' . ($syncedTicket->assignedStaff->lastName ?? ''))
+                            : null,
+                        'assigned_staff_email' => $syncedTicket->assignedStaff->email ?? null,
                         'status' => $syncedTicket->status->name ?? 'Unknown',
                         'statusColor' => $syncedTicket->status->color ?? '#gray',
                         'serviceType' => $syncedTicket->service_type,
