@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use App\Services\FirestoreService;
@@ -97,12 +98,74 @@ class ProfileController extends Controller
                 'lastName' => $lastName,
                 'email' => $email,
                 'role' => $user->role ?? 'customer',
+                'phone' => $user->phone ?? null,
+                'gender' => $user->gender ?? null,
+                'birthdate' => $user->birthdate ? $user->birthdate->format('Y-m-d') : null,
                 'region' => $user->region ?? null,
                 'city' => $user->city ?? null,
                 'branch' => $user->branch ?? null,
                 'profile_photo' => $profilePhotoUrl,
             ],
         ]);
+    }
+
+    /**
+     * Update authenticated user profile
+     */
+    public function updateUser(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated',
+            ], 401);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'username' => 'nullable|string|max:50|unique:users,username,' . $user->id,
+            'firstName' => 'nullable|string|max:50',
+            'lastName' => 'nullable|string|max:50',
+            'phone' => 'nullable|string|max:20',
+            'location' => 'nullable|string|max:255',
+            'gender' => 'nullable|string|max:20',
+            'birthdate' => 'nullable|date',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation Error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        if ($request->filled('username')) {
+            $user->username = $request->input('username');
+        }
+        if ($request->filled('firstName')) {
+            $user->firstName = $request->input('firstName');
+        }
+        if ($request->filled('lastName')) {
+            $user->lastName = $request->input('lastName');
+        }
+        if ($request->filled('phone')) {
+            $user->phone = $request->input('phone');
+        }
+        if ($request->filled('location')) {
+            $user->city = $request->input('location');
+        }
+        if ($request->filled('gender')) {
+            $user->gender = $request->input('gender');
+        }
+        if ($request->filled('birthdate')) {
+            $user->birthdate = $request->input('birthdate');
+        }
+
+        $user->save();
+
+        return $this->user($request);
     }
 
     /**
@@ -197,6 +260,57 @@ class ProfileController extends Controller
     public function updatePhoto(Request $request)
     {
         return $this->uploadPhoto($request);
+    }
+
+    /**
+     * Delete authenticated user account
+     */
+    public function deleteUser(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated',
+            ], 401);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'password' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation Error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        if (!$user->password || !Hash::check($request->input('password'), $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid password',
+            ], 403);
+        }
+
+        // Remove stored profile photo if present
+        if ($user->profile_photo && Storage::disk('public')->exists($user->profile_photo)) {
+            Storage::disk('public')->delete($user->profile_photo);
+        }
+
+        // Revoke tokens before deleting account
+        if (method_exists($user, 'tokens')) {
+            $user->tokens()->delete();
+        }
+
+        $user->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Account deleted successfully',
+        ]);
     }
 
     /**

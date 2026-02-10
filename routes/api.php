@@ -28,6 +28,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/change-password', [AuthController::class, 'changePassword']);
         Route::post('/set-initial-password', [AuthController::class, 'setInitialPassword']);
         Route::get('/user', [ProfileController::class, 'user']);
+        Route::post('/user/update', [ProfileController::class, 'updateUser']);
+        Route::post('/user/delete', [ProfileController::class, 'deleteUser']);
         Route::get('/profile', [ProfileController::class, 'show']);
         Route::post('/profile/photo', [ProfileController::class, 'uploadPhoto']);
         Route::put('/profile/photo', [ProfileController::class, 'updatePhoto']);
