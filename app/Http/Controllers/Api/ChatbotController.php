@@ -25,22 +25,24 @@ class ChatbotController extends Controller
      */
     public function handle(Request $request)
     {
+        // Extract user_id from authenticated user
+        $userId = auth()->id();
+        
         // Validate incoming request
         $validated = $request->validate([
             'message' => 'required|string|max:1000',
-            'user_id' => 'nullable|integer|exists:users,id',
         ]);
 
         $message = strtolower(trim($validated['message']));
-        $userId = $validated['user_id'] ?? null;
         $originalMessage = $validated['message'];
 
         // First try keyword-based responses for common queries
         $keywordResponse = $this->generateKeywordResponse($message, $userId);
         
         if ($keywordResponse) {
+            $filteredResponse = $this->filterConfidentialData($keywordResponse);
             return response()->json([
-                'reply' => $keywordResponse,
+                'reply' => $filteredResponse,
                 'timestamp' => now(),
                 'method' => 'keyword',
             ]);
@@ -50,9 +52,10 @@ class ChatbotController extends Controller
         try {
             $context = $this->buildContext($userId, $originalMessage);
             $aiResponse = $this->aiService->getSupportResponse($originalMessage, $context);
+            $filteredAiResponse = $this->filterConfidentialData($aiResponse);
 
             return response()->json([
-                'reply' => $aiResponse,
+                'reply' => $filteredAiResponse,
                 'timestamp' => now(),
                 'method' => 'ai',
             ]);
@@ -60,12 +63,47 @@ class ChatbotController extends Controller
             \Log::error('Chatbot error: ' . $e->getMessage());
             
             // Provide helpful fallback response
+            $fallbackResponse = "I understand you're asking about: \"" . $originalMessage . "\". For detailed assistance, please contact our support team at support@ashcol.com or visit our help center. You can also ask me about tickets, services, or account help!";
+            $filteredFallback = $this->filterConfidentialData($fallbackResponse);
+            
             return response()->json([
-                'reply' => "I understand you're asking about: \"" . $originalMessage . "\". For detailed assistance, please contact our support team at support@ashcol.com or visit our help center. You can also ask me about tickets, services, or account help!",
+                'reply' => $filteredFallback,
                 'timestamp' => now(),
                 'method' => 'fallback',
             ]);
         }
+    }
+
+    /**
+     * Filter out confidential data patterns from response text
+     *
+     * @param string $text
+     * @return string
+     */
+    private function filterConfidentialData(string $text): string
+    {
+        // Pattern for credit card numbers (13-19 digits, with optional spaces or dashes)
+        $creditCardPattern = '/\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{3,4}\b/';
+        if (preg_match($creditCardPattern, $text)) {
+            \Log::warning('Confidential data detected: Credit card number pattern found in chatbot response');
+            $text = preg_replace($creditCardPattern, '[REDACTED]', $text);
+        }
+
+        // Pattern for potential passwords (common password-like strings)
+        $passwordPattern = '/\b(password|pwd|pass)[\s:=]+[\w!@#$%^&*()]+/i';
+        if (preg_match($passwordPattern, $text)) {
+            \Log::warning('Confidential data detected: Password pattern found in chatbot response');
+            $text = preg_replace($passwordPattern, '[REDACTED]', $text);
+        }
+
+        // Pattern for API keys (common formats like "api_key: xxxxx" or "apiKey=xxxxx")
+        $apiKeyPattern = '/\b(api[_\-]?key|apikey|api[_\-]?secret)[\s:=]+[\w\-]+/i';
+        if (preg_match($apiKeyPattern, $text)) {
+            \Log::warning('Confidential data detected: API key pattern found in chatbot response');
+            $text = preg_replace($apiKeyPattern, '[REDACTED]', $text);
+        }
+
+        return $text;
     }
 
     /**
@@ -95,6 +133,11 @@ class ChatbotController extends Controller
         // Check ticket status
         if ($this->matchesKeywords($message, ['ticket status', 'my tickets', 'check ticket', 'ticket update'])) {
             if ($userId) {
+                // Check if message contains a ticket ID pattern (e.g., "ticket #123" or "ticket 123")
+                if (preg_match('/ticket\s*#?(\d+)/i', $message, $matches)) {
+                    $ticketId = (int)$matches[1];
+                    return $this->getSpecificTicketStatus($userId, $ticketId);
+                }
                 return $this->getTicketStatus($userId);
             }
             return "Please log in to check your ticket status. Once logged in, visit your dashboard to view your tickets.";
@@ -159,10 +202,10 @@ class ChatbotController extends Controller
      */
     private function getTicketStatus(int $userId): string
     {
-        // Get all tickets for the user
+        // Get up to 5 most recent tickets for the user, ordered by most recent first
         $tickets = Ticket::where('customer_id', $userId)
             ->with(['status', 'assignedStaff'])
-            ->latest()
+            ->orderBy('created_at', 'desc')
             ->limit(5)
             ->get();
 
@@ -174,10 +217,50 @@ class ChatbotController extends Controller
         
         foreach ($tickets as $ticket) {
             $status = $ticket->status->name ?? 'Unknown';
-            $response .= "📌 Ticket #{$ticket->id}: {$ticket->title}\n";
+            $ticketTitle = $ticket->title ?? 'No title';
+            
+            $response .= "📌 Ticket ID: #{$ticket->id}\n";
+            $response .= "   Title: {$ticketTitle}\n";
             $response .= "   Status: {$status}\n";
-
             $response .= "   Created: " . $ticket->created_at->format('M d, Y') . "\n\n";
+        }
+
+        if ($tickets->count() >= 5) {
+            $response .= "Showing your 5 most recent tickets.";
+        }
+
+        return $response;
+    }
+
+    /**
+     * Get status for a specific ticket by ID
+     *
+     * @param int $userId
+     * @param int $ticketId
+     * @return string
+     */
+    private function getSpecificTicketStatus(int $userId, int $ticketId): string
+    {
+        // Find the ticket and verify it belongs to the user
+        $ticket = Ticket::where('id', $ticketId)
+            ->where('customer_id', $userId)
+            ->with(['status', 'assignedStaff'])
+            ->first();
+
+        if (!$ticket) {
+            return "I couldn't find ticket #{$ticketId} in your account. Please check the ticket ID and try again.";
+        }
+
+        $status = $ticket->status->name ?? 'Unknown';
+        $ticketTitle = $ticket->title ?? 'No title';
+        
+        $response = "📌 Ticket ID: #{$ticket->id}\n";
+        $response .= "   Title: {$ticketTitle}\n";
+        $response .= "   Status: {$status}\n";
+        $response .= "   Created: " . $ticket->created_at->format('M d, Y') . "\n";
+        
+        if ($ticket->assignedStaff) {
+            $response .= "   Assigned to: {$ticket->assignedStaff->firstName} {$ticket->assignedStaff->lastName}\n";
         }
 
         return $response;
