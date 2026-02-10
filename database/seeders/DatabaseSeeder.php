@@ -21,13 +21,15 @@ class DatabaseSeeder extends Seeder
 
         // Create admin user
         User::factory()->admin()->create([
-            'name' => 'Admin User',
+            'firstName' => 'Admin',
+            'lastName' => 'User',
             'email' => 'admin@example.com',
         ]);
 
         // Create technician user
         User::factory()->technician()->create([
-            'name' => 'Technician User',
+            'firstName' => 'Technician',
+            'lastName' => 'User',
             'email' => 'technician@example.com',
         ]);
 
@@ -36,7 +38,8 @@ class DatabaseSeeder extends Seeder
             'username' => 'Employee',
             'firstName' => 'Employee',
             'lastName' => 'User',
-            'name' => 'Employee User',
+            'firstName' => 'Employee',
+            'lastName' => 'User',
             'email' => 'employee@ashcol.com',
             'password' => \Illuminate\Support\Facades\Hash::make('EMP1234'),
             'role' => User::ROLE_TECHNICIAN,
@@ -45,7 +48,8 @@ class DatabaseSeeder extends Seeder
 
         // Create customer user
         User::factory()->customer()->create([
-            'name' => 'Customer User',
+            'firstName' => 'Customer',
+            'lastName' => 'User',
             'email' => 'customer@example.com',
         ]);
 
