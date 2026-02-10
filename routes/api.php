@@ -19,11 +19,11 @@ Route::prefix('v1')->group(function () {
     Route::post('/request-password-reset', [AuthController::class, 'requestPasswordReset']);
     Route::post('/forgot-password', [AuthController::class, 'requestPasswordReset']); // Alias for Android app compatibility
     Route::post('/reset-password', [AuthController::class, 'resetPassword']);
-    Route::post('/chatbot', [ChatbotController::class, 'handle']);
     Route::get('/about', [AboutController::class, 'show']);
     
     // Protected routes
     Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/chatbot', [ChatbotController::class, 'handle']);
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/change-password', [AuthController::class, 'changePassword']);
         Route::post('/set-initial-password', [AuthController::class, 'setInitialPassword']);
