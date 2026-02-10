@@ -36,6 +36,8 @@ class User extends Authenticatable
         'password',
         'role',
         'phone',
+        'gender',
+        'birthdate',
         'region',
         'city',
         'branch',
@@ -66,6 +68,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'latitude' => 'decimal:8',
             'longitude' => 'decimal:8',
+            'birthdate' => 'date',
         ];
     }
 

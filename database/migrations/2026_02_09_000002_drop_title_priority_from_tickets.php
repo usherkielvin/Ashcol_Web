@@ -15,9 +15,6 @@ return new class extends Migration
             if (Schema::hasColumn('tickets', 'title')) {
                 $table->dropColumn('title');
             }
-            if (Schema::hasColumn('tickets', 'priority')) {
-                $table->dropColumn('priority');
-            }
         });
     }
 
@@ -29,9 +26,6 @@ return new class extends Migration
         Schema::table('tickets', function (Blueprint $table) {
             if (!Schema::hasColumn('tickets', 'title')) {
                 $table->string('title')->nullable();
-            }
-            if (!Schema::hasColumn('tickets', 'priority')) {
-                $table->enum('priority', ['low', 'medium', 'high', 'urgent'])->default('medium');
             }
         });
     }
