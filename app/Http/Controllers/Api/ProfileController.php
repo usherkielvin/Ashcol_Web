@@ -337,7 +337,7 @@ class ProfileController extends Controller
                 // Admin can see all employees
                 $employees = DB::table('users')
                     ->whereIn('role', ['technician', 'manager'])
-                    ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
+                    ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch', 'profile_photo')
                     ->orderBy('branch')
                     ->orderBy('firstName')
                     ->get();
@@ -354,6 +354,16 @@ class ProfileController extends Controller
                 // Format employee data
                 $formattedEmployees = [];
                 foreach ($employees as $employee) {
+                    // Build profile photo URL
+                    $profilePhotoUrl = null;
+                    if ($employee->profile_photo) {
+                        if (strpos($employee->profile_photo, 'http') === 0) {
+                            $profilePhotoUrl = $employee->profile_photo;
+                        } else {
+                            $profilePhotoUrl = asset('storage/' . $employee->profile_photo);
+                        }
+                    }
+                    
                     $formattedEmployees[] = [
                         'id' => $employee->id,
                         'username' => $employee->username,
@@ -363,6 +373,7 @@ class ProfileController extends Controller
                         'role' => $employee->role,
                         'branch' => $employee->branch,
                         'ticket_count' => $ticketCounts[$employee->id] ?? 0,
+                        'profile_photo' => $profilePhotoUrl,
                     ];
                 }
 
@@ -388,7 +399,7 @@ class ProfileController extends Controller
                 $employees = DB::table('users')
                     ->whereIn('role', ['technician'])
                     ->where('branch', $managerBranch)
-                    ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
+                    ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch', 'profile_photo')
                     ->get();
 
                 // Get ticket counts for these employees (excluding completed/paid/cancelled)
@@ -403,6 +414,16 @@ class ProfileController extends Controller
                 // Format employee data
                 $formattedEmployees = [];
                 foreach ($employees as $employee) {
+                    // Build profile photo URL
+                    $profilePhotoUrl = null;
+                    if ($employee->profile_photo) {
+                        if (strpos($employee->profile_photo, 'http') === 0) {
+                            $profilePhotoUrl = $employee->profile_photo;
+                        } else {
+                            $profilePhotoUrl = asset('storage/' . $employee->profile_photo);
+                        }
+                    }
+                    
                     $formattedEmployees[] = [
                         'id' => $employee->id,
                         'username' => $employee->username,
@@ -412,6 +433,7 @@ class ProfileController extends Controller
                         'role' => $employee->role,
                         'branch' => $employee->branch,
                         'ticket_count' => $ticketCounts[$employee->id] ?? 0,
+                        'profile_photo' => $profilePhotoUrl,
                     ];
                 }
 
@@ -501,7 +523,7 @@ class ProfileController extends Controller
             $employees = DB::table('users')
                 ->whereIn('role', ['technician', 'manager'])
                 ->where('branch', $branchName)
-                ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
+                ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch', 'profile_photo')
                 ->orderBy('firstName')
                 ->get();
 
@@ -517,6 +539,16 @@ class ProfileController extends Controller
             // Format employee data
             $formattedEmployees = [];
             foreach ($employees as $employee) {
+                // Build profile photo URL
+                $profilePhotoUrl = null;
+                if ($employee->profile_photo) {
+                    if (strpos($employee->profile_photo, 'http') === 0) {
+                        $profilePhotoUrl = $employee->profile_photo;
+                    } else {
+                        $profilePhotoUrl = asset('storage/' . $employee->profile_photo);
+                    }
+                }
+                
                 $formattedEmployees[] = [
                     'id' => $employee->id,
                     'username' => $employee->username,
@@ -526,6 +558,7 @@ class ProfileController extends Controller
                     'role' => $employee->role,
                     'branch' => $employee->branch,
                     'ticket_count' => $ticketCounts[$employee->id] ?? 0,
+                    'profile_photo' => $profilePhotoUrl,
                 ];
             }
 
