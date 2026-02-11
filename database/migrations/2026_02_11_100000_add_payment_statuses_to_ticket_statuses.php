@@ -14,10 +14,10 @@ return new class extends Migration
     {
         $now = now();
         
-        // Add new payment-related statuses
+        // Add new payment-related status
         $statuses = [
             ['name' => 'Pending Payment', 'color' => '#F59E0B', 'is_default' => false],
-            ['name' => 'Paid', 'color' => '#10B981', 'is_default' => false],
+            // Note: "Paid" status removed - using "Completed" instead
         ];
 
         foreach ($statuses as $status) {
@@ -36,6 +36,19 @@ return new class extends Migration
                 ]);
             }
         }
+        
+        // Update any existing "Paid" tickets to "Completed"
+        $completedStatus = DB::table('ticket_statuses')->where('name', 'Completed')->first();
+        $paidStatus = DB::table('ticket_statuses')->where('name', 'Paid')->first();
+        
+        if ($completedStatus && $paidStatus) {
+            DB::table('tickets')
+                ->where('status_id', $paidStatus->id)
+                ->update(['status_id' => $completedStatus->id]);
+        }
+        
+        // Remove "Paid" status if it exists
+        DB::table('ticket_statuses')->where('name', 'Paid')->delete();
     }
 
     /**
@@ -43,9 +56,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Remove the payment-related statuses
+        // Remove the payment-related status
         DB::table('ticket_statuses')
-            ->whereIn('name', ['Pending Payment', 'Paid'])
+            ->where('name', 'Pending Payment')
             ->delete();
     }
 };

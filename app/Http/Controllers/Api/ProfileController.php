@@ -351,7 +351,7 @@ class ProfileController extends Controller
                     ->join('ticket_statuses', 'tickets.status_id', '=', 'ticket_statuses.id')
                     ->select('assigned_staff_id', DB::raw('count(*) as total'))
                     ->whereIn('assigned_staff_id', $employees->pluck('id'))
-                    ->whereNotIn('ticket_statuses.name', ['Completed', 'Paid', 'Cancelled'])
+                    ->whereNotIn('ticket_statuses.name', ['Completed', 'Cancelled'])
                     ->groupBy('assigned_staff_id')
                     ->pluck('total', 'assigned_staff_id');
 
@@ -400,7 +400,7 @@ class ProfileController extends Controller
                     ->join('ticket_statuses', 'tickets.status_id', '=', 'ticket_statuses.id')
                     ->select('assigned_staff_id', DB::raw('count(*) as total'))
                     ->whereIn('assigned_staff_id', $employees->pluck('id'))
-                    ->whereNotIn('ticket_statuses.name', ['Completed', 'Paid', 'Cancelled'])
+                    ->whereNotIn('ticket_statuses.name', ['Completed', 'Cancelled'])
                     ->groupBy('assigned_staff_id')
                     ->pluck('total', 'assigned_staff_id');
 
@@ -514,7 +514,7 @@ class ProfileController extends Controller
                 ->join('ticket_statuses', 'tickets.status_id', '=', 'ticket_statuses.id')
                 ->select('assigned_staff_id', DB::raw('count(*) as total'))
                 ->whereIn('assigned_staff_id', $employees->pluck('id'))
-                ->whereNotIn('ticket_statuses.name', ['Completed', 'Paid', 'Cancelled'])
+                ->whereNotIn('ticket_statuses.name', ['Completed', 'Cancelled'])
                 ->groupBy('assigned_staff_id')
                 ->pluck('total', 'assigned_staff_id');
 
@@ -781,4 +781,5 @@ class ProfileController extends Controller
         }
     }
 }
+
 

@@ -82,17 +82,17 @@ class PaymentConfirmationController extends Controller
                 'collected_at' => now(),
             ]);
 
-            // Update ticket status to Paid
-            $paidStatus = TicketStatus::where('name', 'Paid')->first();
+            // Update ticket status to Completed
+            $completedStatus = TicketStatus::where('name', 'Completed')->first();
             
-            if (!$paidStatus) {
+            if (!$completedStatus) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Paid status not found in system'
+                    'message' => 'Completed status not found in system'
                 ], 500);
             }
 
-            $ticket->status_id = $paidStatus->id;
+            $ticket->status_id = $completedStatus->id;
             $ticket->save();
 
             // Send FCM notification to technician
@@ -109,7 +109,7 @@ class PaymentConfirmationController extends Controller
                     'status' => $payment->status,
                     'confirmed_at' => $payment->confirmed_at
                 ],
-                'ticket_status' => 'Paid'
+                'ticket_status' => 'Completed'
             ], 200);
 
         } catch (\Exception $e) {

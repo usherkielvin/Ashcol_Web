@@ -87,6 +87,8 @@ Route::prefix('v1')->group(function () {
         // Branch routes
         Route::get('/branches', [BranchController::class, 'index']);
         Route::post('/branches/sync-firestore', [BranchController::class, 'syncToFirestore']);
+        Route::get('/branches/reports', [BranchController::class, 'reports']);
+        Route::get('/branches/{branchId}/tickets', [BranchController::class, 'branchTickets']);
     });
 });
 

@@ -150,7 +150,7 @@ class Ticket extends Model
     public function isPaid(): bool
     {
         $statusName = $this->status ? $this->status->name : null;
-        return $statusName === 'Paid';
+        return $statusName === 'Completed';
     }
 
 }
