@@ -181,4 +181,52 @@ class Branch extends Model
         // Fallback: no automatic branch
         return null;
     }
+
+    /**
+     * Extract region and city from branch name
+     * This is the inverse of guessFromRegionCity()
+     */
+    public static function extractRegionCityFromBranch(string $branchName): ?array
+    {
+        $branch = mb_strtolower(trim($branchName), 'UTF-8');
+
+        // NCR branches
+        if (str_contains($branch, 'valenzuela')) {
+            return ['region' => 'NCR', 'city' => 'Valenzuela'];
+        }
+        if (str_contains($branch, 'taguig')) {
+            return ['region' => 'NCR', 'city' => 'Taguig'];
+        }
+        if (str_contains($branch, 'rodriguez') || str_contains($branch, 'rizal')) {
+            return ['region' => 'NCR', 'city' => 'Rodriguez, Rizal'];
+        }
+
+        // Central Luzon branches
+        if (str_contains($branch, 'pampanga')) {
+            return ['region' => 'Central Luzon', 'city' => 'San Fernando, Pampanga'];
+        }
+        if (str_contains($branch, 'bulacan')) {
+            return ['region' => 'Central Luzon', 'city' => 'Malolos, Bulacan'];
+        }
+
+        // CALABARZON branches
+        if (str_contains($branch, 'gentri') || str_contains($branch, 'general trias')) {
+            return ['region' => 'CALABARZON', 'city' => 'General Trias, Cavite'];
+        }
+        if (str_contains($branch, 'dasmarinas') || str_contains($branch, 'dasma')) {
+            return ['region' => 'CALABARZON', 'city' => 'Dasmariñas, Cavite'];
+        }
+        if (str_contains($branch, 'sta rosa') || str_contains($branch, 'santa rosa') || str_contains($branch, 'tagaytay')) {
+            return ['region' => 'CALABARZON', 'city' => 'Santa Rosa, Laguna'];
+        }
+        if (str_contains($branch, 'laguna') && !str_contains($branch, 'sta rosa') && !str_contains($branch, 'santa rosa')) {
+            return ['region' => 'CALABARZON', 'city' => 'Santa Cruz, Laguna'];
+        }
+        if (str_contains($branch, 'batangas')) {
+            return ['region' => 'CALABARZON', 'city' => 'Batangas City, Batangas'];
+        }
+
+        // If no match found, return null
+        return null;
+    }
 }

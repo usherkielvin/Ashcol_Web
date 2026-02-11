@@ -44,19 +44,15 @@ class AuthController extends Controller
             'username' => $user->username ?? null,
             'firstName' => $user->firstName ?? null,
             'lastName' => $user->lastName ?? null,
-            // 'name' column removed, concatenating dynamically if needed,
-            // but 'name' key in JSON might be expected by frontend?
-            // Let's keep the key 'name' but generate it dynamically.
             'name' => trim(($user->firstName ?? '') . ' ' . ($user->lastName ?? '')),
             'email' => $user->email ?? null,
             'role' => $normalizedRole,
             'region' => $user->region ?? null,
             'city' => $user->city ?? null,
-            'location' => $user->location ?? null, // Legacy
             'branch' => $user->branch ?? null,
             'profile_photo' => $profilePhotoUrl,
             'email_verified' => !is_null($user->email_verified_at),
-            'google_linked' => !is_null($user->email_verified_at) && $user->password === null, // Rough heuristic
+            'google_linked' => !is_null($user->email_verified_at) && $user->password === null,
         ];
     }
 
@@ -179,30 +175,22 @@ class AuthController extends Controller
             $firstName = $request->input('first_name', '');
             $lastName = $request->input('last_name', '');
             $phone = $request->input('phone', '');
+            $region = $request->input('region');
+            $city = $request->input('city');
+
+            // Guess branch from region/city
+            $guessedBranch = \App\Models\Branch::guessFromRegionCity($region, $city);
             
-            // Handle location inputs
-            $input = $request->all();
-            
-            // If old 'location' is provided and region/city are missing, try to split it
-            if (!isset($input['region']) && !isset($input['city']) && isset($input['location']) && is_string($input['location'])) {
-                $parts = array_map('trim', explode(',', $input['location'], 2));
-                if (count($parts) === 2) {
-                    [$maybeRegion, $maybeCity] = $parts;
-                    $input['region'] = $maybeRegion;
-                    $input['city']   = $maybeCity;
-                } else {
-                    $input['city'] = $parts[0];
+            // If branch is guessed, extract region/city from branch
+            if ($guessedBranch && (!$region || !$city)) {
+                $regionCity = \App\Models\Branch::extractRegionCityFromBranch($guessedBranch);
+                if ($regionCity) {
+                    $region = $region ?: $regionCity['region'];
+                    $city = $city ?: $regionCity['city'];
                 }
-                \Log::info('Google Register: Location parsed', [
-                    'original' => $input['location'],
-                    'parsed_region' => $input['region'] ?? null,
-                    'parsed_city' => $input['city'] ?? null,
-                ]);
             }
 
-            // Guess branch
-            $guessedBranch = \App\Models\Branch::guessFromRegionCity($input['region'] ?? null, $input['city'] ?? null);
-            \Log::info('Google Register: Branch guessed', ['branch' => $guessedBranch]);
+            \Log::info('Google Register', ['branch' => $guessedBranch, 'region' => $region, 'city' => $city]);
 
             // Check if user already exists
             $existingUser = User::where('email', $email)->first();
@@ -210,7 +198,7 @@ class AuthController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Account already exists. Please sign in instead.',
-                ], 409); // Conflict status code
+                ], 409);
             }
 
             // Generate username from email
@@ -224,19 +212,18 @@ class AuthController extends Controller
                 $counter++;
             }
 
-            // Create new user
+            // Create new user with auto-assigned region/city from branch
             $user = User::create([
                 'username' => $username,
                 'firstName' => $firstName ?: 'User',
                 'lastName' => $lastName ?: '',
                 'email' => $email,
-                'password' => Hash::make(uniqid('google_', true)), // Random password
-                'role' => 'customer', // Default role
+                'password' => Hash::make(uniqid('google_', true)),
+                'role' => 'customer',
                 'phone' => $phone,
-                'email_verified_at' => now(), // Google emails are verified
-                'region' => $input['region'] ?? null,
-                'city' => $input['city'] ?? null,
-                'location' => $input['location'] ?? null,
+                'email_verified_at' => now(),
+                'region' => $region,
+                'city' => $city,
                 'branch' => $guessedBranch,
             ]);
 
@@ -420,23 +407,6 @@ class AuthController extends Controller
                 $input['password_confirmation'] = $input['passwordConfirmation'];
             }
 
-            // If old 'location' is provided and region/city are missing, try to split it
-            if (!isset($input['region']) && !isset($input['city']) && isset($input['location']) && is_string($input['location'])) {
-                $parts = array_map('trim', explode(',', $input['location'], 2));
-                if (count($parts) === 2) {
-                    [$maybeRegion, $maybeCity] = $parts;
-                    $input['region'] = $maybeRegion;
-                    $input['city']   = $maybeCity;
-                } else {
-                    // If only one part, treat it as city
-                    $input['city'] = $parts[0];
-                }
-                \Log::info('Location parsed from single string', [
-                    'original' => $input['location'],
-                    'parsed_region' => $input['region'] ?? null,
-                    'parsed_city' => $input['city'] ?? null,
-                ]);
-            }
 
             // Normalize email (trim + lowercase) and perform an explicit uniqueness check
             if (isset($input['email'])) {
@@ -479,8 +449,6 @@ class AuthController extends Controller
                 'role' => 'required|string|in:customer,technician,manager,admin',
                 'region' => 'nullable|string|max:255',
                 'city' => 'nullable|string|max:255',
-                // Accept legacy location field but it is optional and mainly for backward compatibility
-                'location' => 'nullable|string|max:255',
                 'branch' => 'nullable|string|max:255',
             ], [
                 'email.required' => 'Email is required',
@@ -511,14 +479,23 @@ class AuthController extends Controller
                 ], 422);
             }
 
-            // Guess branch from region/city for auto-branching (only if branch not explicitly provided)
-            \Log::info('Branch guessing input', [
-                'region' => $input['region'] ?? null,
-                'city' => $input['city'] ?? null,
-                'location_raw' => $input['location'] ?? null,
-            ]);
+            // Guess branch from region/city for auto-branching
             $guessedBranch = \App\Models\Branch::guessFromRegionCity($input['region'] ?? null, $input['city'] ?? null);
-            \Log::info('Branch guessing result', ['guessed_branch' => $guessedBranch]);
+            
+            // Auto-assign region/city from branch if not provided
+            $region = $input['region'] ?? null;
+            $city = $input['city'] ?? null;
+            $branch = $input['branch'] ?? $guessedBranch;
+            
+            if ($branch && (!$region || !$city)) {
+                $regionCity = \App\Models\Branch::extractRegionCityFromBranch($branch);
+                if ($regionCity) {
+                    $region = $region ?: $regionCity['region'];
+                    $city = $city ?: $regionCity['city'];
+                }
+            }
+
+            \Log::info('Registration', ['branch' => $branch, 'region' => $region, 'city' => $city]);
 
             // Generate verification code
             $verificationCode = EmailVerification::generateCode();
@@ -533,7 +510,7 @@ class AuthController extends Controller
                 ]
             );
 
-            // Create user
+            // Create user with auto-assigned region/city from branch
             $user = User::create([
                 'username' => $input['username'],
                 'firstName' => $input['firstName'],
@@ -541,9 +518,9 @@ class AuthController extends Controller
                 'email' => $input['email'],
                 'password' => Hash::make($input['password']),
                 'role' => $input['role'],
-                'region' => $input['region'] ?? null,
-                'city' => $input['city'] ?? null,
-                'branch' => $input['branch'] ?? $guessedBranch,
+                'region' => $region,
+                'city' => $city,
+                'branch' => $branch,
                 'phone' => $input['phone'] ?? null,
             ]);
 

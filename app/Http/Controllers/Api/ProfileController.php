@@ -128,7 +128,6 @@ class ProfileController extends Controller
             'firstName' => 'nullable|string|max:50',
             'lastName' => 'nullable|string|max:50',
             'phone' => 'nullable|string|max:20',
-            'location' => 'nullable|string|max:255',
             'gender' => 'nullable|string|max:20',
             'birthdate' => 'nullable|date',
         ]);
@@ -152,9 +151,6 @@ class ProfileController extends Controller
         }
         if ($request->filled('phone')) {
             $user->phone = $request->input('phone');
-        }
-        if ($request->filled('location')) {
-            $user->city = $request->input('location');
         }
         if ($request->filled('gender')) {
             $user->gender = $request->input('gender');
@@ -553,46 +549,6 @@ class ProfileController extends Controller
         return true;
     }
 
-    /**
-     * Update user location
-     */
-    public function updateLocation(Request $request)
-    {
-        try {
-            $validator = Validator::make($request->all(), [
-                'location' => 'required|string|max:255',
-            ], [
-                'location.required' => 'Location is required',
-                'location.max' => 'Location must not exceed 255 characters',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation Error',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            $user = $request->user();
-            $user->location = $request->location;
-            $user->save();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Location updated successfully',
-                'data' => [
-                    'location' => $user->location,
-                ],
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Update location error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update location: ' . $e->getMessage(),
-            ], 500);
-        }
-    }
 
     /**
      * Get all branches

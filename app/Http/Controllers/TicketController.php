@@ -139,11 +139,7 @@ class TicketController extends Controller
             $data['title'] = $validated['title'] ?? ($validated['service_type'] . ' Request');
             $data['ticket_id'] = Ticket::generateTicketId();
 
-            // Update user location from ticket address for branch assignment (if user has none)
-            if (!$user->location && !empty($validated['address'])) {
-                $user->update(['location' => $validated['address']]);
-            }
-            
+
             // Branch Assignment Logic
             $branchName = $user->branch;
             
@@ -225,13 +221,6 @@ class TicketController extends Controller
                 }
             }
 
-            // Update user coordinates if provided
-            if (isset($validated['latitude']) && isset($validated['longitude'])) {
-                $user->update([
-                    'latitude' => $validated['latitude'],
-                    'longitude' => $validated['longitude'],
-                ]);
-            }
 
             try {
                 $ticket = Ticket::create($data);

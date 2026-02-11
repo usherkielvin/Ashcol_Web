@@ -43,7 +43,6 @@ class User extends Authenticatable
         'branch',
         'profile_photo',
         'fcm_token',
-        // facebook_id is now stored in facebook_accounts table, not here
     ];
 
     /**
@@ -66,8 +65,6 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'latitude' => 'decimal:8',
-            'longitude' => 'decimal:8',
             'birthdate' => 'date',
         ];
     }
