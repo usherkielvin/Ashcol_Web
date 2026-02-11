@@ -346,12 +346,12 @@ class ProfileController extends Controller
                     ->orderBy('firstName')
                     ->get();
 
-                // Get ticket counts for these employees
+                // Get ticket counts for these employees (excluding completed/paid/cancelled)
                 $ticketCounts = DB::table('tickets')
+                    ->join('ticket_statuses', 'tickets.status_id', '=', 'ticket_statuses.id')
                     ->select('assigned_staff_id', DB::raw('count(*) as total'))
                     ->whereIn('assigned_staff_id', $employees->pluck('id'))
-                    // Optional: Filter by status if needed, e.g., excluding 'Closed'
-                    // ->whereIn('status_id', ...)
+                    ->whereNotIn('ticket_statuses.name', ['Completed', 'Paid', 'Cancelled'])
                     ->groupBy('assigned_staff_id')
                     ->pluck('total', 'assigned_staff_id');
 
@@ -395,10 +395,12 @@ class ProfileController extends Controller
                     ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
                     ->get();
 
-                // Get ticket counts for these employees
+                // Get ticket counts for these employees (excluding completed/paid/cancelled)
                 $ticketCounts = DB::table('tickets')
+                    ->join('ticket_statuses', 'tickets.status_id', '=', 'ticket_statuses.id')
                     ->select('assigned_staff_id', DB::raw('count(*) as total'))
                     ->whereIn('assigned_staff_id', $employees->pluck('id'))
+                    ->whereNotIn('ticket_statuses.name', ['Completed', 'Paid', 'Cancelled'])
                     ->groupBy('assigned_staff_id')
                     ->pluck('total', 'assigned_staff_id');
 
@@ -507,10 +509,12 @@ class ProfileController extends Controller
                 ->orderBy('firstName')
                 ->get();
 
-            // Get ticket counts for these employees
+            // Get ticket counts for these employees (excluding completed/paid/cancelled)
             $ticketCounts = DB::table('tickets')
+                ->join('ticket_statuses', 'tickets.status_id', '=', 'ticket_statuses.id')
                 ->select('assigned_staff_id', DB::raw('count(*) as total'))
                 ->whereIn('assigned_staff_id', $employees->pluck('id'))
+                ->whereNotIn('ticket_statuses.name', ['Completed', 'Paid', 'Cancelled'])
                 ->groupBy('assigned_staff_id')
                 ->pluck('total', 'assigned_staff_id');
 
