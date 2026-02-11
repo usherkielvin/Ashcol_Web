@@ -23,6 +23,7 @@ class Payment extends Model
         'collected_at',
         'submitted_at',
         'completed_at',
+        'confirmed_at',
     ];
 
     protected $casts = [
@@ -30,6 +31,7 @@ class Payment extends Model
         'collected_at' => 'datetime',
         'submitted_at' => 'datetime',
         'completed_at' => 'datetime',
+        'confirmed_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

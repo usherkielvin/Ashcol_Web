@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\ChatbotController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\TicketController;
 use App\Http\Controllers\Api\BranchController;
+use App\Http\Controllers\Api\PaymentRequestController;
+use App\Http\Controllers\Api\PaymentConfirmationController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -66,10 +68,15 @@ Route::prefix('v1')->group(function () {
         Route::get('/employees/by-branch', [ProfileController::class, 'getEmployeesByBranch']);
         Route::get('/branches', [ProfileController::class, 'getBranches']);
         
+        // Admin routes
+        Route::delete('/admin/users/{userId}', [ProfileController::class, 'adminDeleteUser']);
+        
         // Schedule management routes
         Route::put('/tickets/{ticketId}/schedule', [TicketController::class, 'setSchedule']);
         
         // Payment routes
+        Route::post('/payment-request', [PaymentRequestController::class, 'requestPayment']);
+        Route::post('/payment-confirm', [PaymentConfirmationController::class, 'confirmPayment']);
         Route::post('/tickets/{ticketId}/complete-work', [TicketController::class, 'completeWorkWithPayment']);
         Route::get('/payments/by-ticket/{ticketId}', [TicketController::class, 'getPaymentByTicketId']);
         Route::get('/manager/payments', [TicketController::class, 'getPaymentHistory']);

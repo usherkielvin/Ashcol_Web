@@ -715,5 +715,66 @@ class ProfileController extends Controller
     /**
      * Register FCM token for push notifications
      */
+
+    /**
+     * Admin delete user by ID (no password required)
+     */
+    public function adminDeleteUser(Request $request, $userId)
+    {
+        $admin = $request->user();
+
+        // Check if the authenticated user is an admin
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Admin access required.',
+            ], 403);
+        }
+
+        // Find the user to delete
+        $userToDelete = \App\Models\User::find($userId);
+
+        if (!$userToDelete) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found',
+            ], 404);
+        }
+
+        // Prevent admin from deleting themselves
+        if ($userToDelete->id === $admin->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You cannot delete your own account',
+            ], 400);
+        }
+
+        try {
+            // Remove stored profile photo if present
+            if ($userToDelete->profile_photo && Storage::disk('public')->exists($userToDelete->profile_photo)) {
+                Storage::disk('public')->delete($userToDelete->profile_photo);
+            }
+
+            // Revoke tokens before deleting account
+            if (method_exists($userToDelete, 'tokens')) {
+                $userToDelete->tokens()->delete();
+            }
+
+            $userName = $userToDelete->name ?? $userToDelete->email;
+            $userToDelete->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User deleted successfully',
+                'deleted_user' => $userName,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Admin delete user error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete user: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }
 
