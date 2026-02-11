@@ -342,12 +342,12 @@ class ProfileController extends Controller
                     ->orderBy('firstName')
                     ->get();
 
-                // Get ticket counts for these employees
+                // Get ticket counts for these employees (excluding completed/paid/cancelled)
                 $ticketCounts = DB::table('tickets')
+                    ->join('ticket_statuses', 'tickets.status_id', '=', 'ticket_statuses.id')
                     ->select('assigned_staff_id', DB::raw('count(*) as total'))
                     ->whereIn('assigned_staff_id', $employees->pluck('id'))
-                    // Optional: Filter by status if needed, e.g., excluding 'Closed'
-                    // ->whereIn('status_id', ...)
+                    ->whereNotIn('ticket_statuses.name', ['Completed', 'Cancelled'])
                     ->groupBy('assigned_staff_id')
                     ->pluck('total', 'assigned_staff_id');
 
@@ -391,10 +391,12 @@ class ProfileController extends Controller
                     ->select('id', 'username', 'firstName', 'lastName', 'email', 'role', 'branch')
                     ->get();
 
-                // Get ticket counts for these employees
+                // Get ticket counts for these employees (excluding completed/paid/cancelled)
                 $ticketCounts = DB::table('tickets')
+                    ->join('ticket_statuses', 'tickets.status_id', '=', 'ticket_statuses.id')
                     ->select('assigned_staff_id', DB::raw('count(*) as total'))
                     ->whereIn('assigned_staff_id', $employees->pluck('id'))
+                    ->whereNotIn('ticket_statuses.name', ['Completed', 'Cancelled'])
                     ->groupBy('assigned_staff_id')
                     ->pluck('total', 'assigned_staff_id');
 
@@ -503,10 +505,12 @@ class ProfileController extends Controller
                 ->orderBy('firstName')
                 ->get();
 
-            // Get ticket counts for these employees
+            // Get ticket counts for these employees (excluding completed/paid/cancelled)
             $ticketCounts = DB::table('tickets')
+                ->join('ticket_statuses', 'tickets.status_id', '=', 'ticket_statuses.id')
                 ->select('assigned_staff_id', DB::raw('count(*) as total'))
                 ->whereIn('assigned_staff_id', $employees->pluck('id'))
+                ->whereNotIn('ticket_statuses.name', ['Completed', 'Cancelled'])
                 ->groupBy('assigned_staff_id')
                 ->pluck('total', 'assigned_staff_id');
 
@@ -671,5 +675,67 @@ class ProfileController extends Controller
     /**
      * Register FCM token for push notifications
      */
+
+    /**
+     * Admin delete user by ID (no password required)
+     */
+    public function adminDeleteUser(Request $request, $userId)
+    {
+        $admin = $request->user();
+
+        // Check if the authenticated user is an admin
+        if (!$admin || !$admin->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Admin access required.',
+            ], 403);
+        }
+
+        // Find the user to delete
+        $userToDelete = \App\Models\User::find($userId);
+
+        if (!$userToDelete) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found',
+            ], 404);
+        }
+
+        // Prevent admin from deleting themselves
+        if ($userToDelete->id === $admin->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You cannot delete your own account',
+            ], 400);
+        }
+
+        try {
+            // Remove stored profile photo if present
+            if ($userToDelete->profile_photo && Storage::disk('public')->exists($userToDelete->profile_photo)) {
+                Storage::disk('public')->delete($userToDelete->profile_photo);
+            }
+
+            // Revoke tokens before deleting account
+            if (method_exists($userToDelete, 'tokens')) {
+                $userToDelete->tokens()->delete();
+            }
+
+            $userName = $userToDelete->name ?? $userToDelete->email;
+            $userToDelete->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User deleted successfully',
+                'deleted_user' => $userName,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Admin delete user error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete user: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }
+
 

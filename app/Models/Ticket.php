@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Ticket extends Model
 {
@@ -102,6 +103,54 @@ class Ticket extends Model
     public function isAssigned(): bool
     {
         return !is_null($this->assigned_staff_id);
+    }
+
+    /**
+     * Get the payment associated with this ticket
+     */
+    public function payment(): HasOne
+    {
+        return $this->hasOne(Payment::class, 'ticket_table_id');
+    }
+
+    /**
+     * Check if ticket has an associated payment
+     */
+    public function hasPayment(): bool
+    {
+        return $this->payment()->exists();
+    }
+
+    /**
+     * Check if ticket can have payment requested
+     * Ticket must be ongoing (work done) or completed, and not have a payment yet
+     */
+    public function canRequestPayment(): bool
+    {
+        // Get the status name
+        $statusName = $this->status ? $this->status->name : null;
+        
+        // Check if status is 'Ongoing' or 'Completed' and no payment exists
+        // Technicians can request payment after finishing work (while still Ongoing)
+        return ($statusName === 'Ongoing' || $statusName === 'Completed') && !$this->hasPayment();
+    }
+
+    /**
+     * Check if ticket is in pending payment state
+     */
+    public function isPendingPayment(): bool
+    {
+        $statusName = $this->status ? $this->status->name : null;
+        return $statusName === 'Pending Payment';
+    }
+
+    /**
+     * Check if ticket payment is completed
+     */
+    public function isPaid(): bool
+    {
+        $statusName = $this->status ? $this->status->name : null;
+        return $statusName === 'Completed';
     }
 
 }
