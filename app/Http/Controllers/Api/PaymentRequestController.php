@@ -77,14 +77,10 @@ class PaymentRequestController extends Controller
             }
 
             // Update ticket status to Pending Payment
-            $pendingPaymentStatus = TicketStatus::where('name', 'Pending Payment')->first();
-            
-            if (!$pendingPaymentStatus) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Pending Payment status not found in system'
-                ], 500);
-            }
+            $pendingPaymentStatus = TicketStatus::firstOrCreate(
+                ['name' => 'Pending Payment'],
+                ['color' => '#F97316', 'is_default' => false]
+            );
 
             $ticket->status_id = $pendingPaymentStatus->id;
             $ticket->save();
