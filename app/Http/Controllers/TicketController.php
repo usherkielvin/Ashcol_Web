@@ -137,7 +137,7 @@ class TicketController extends Controller
                 }
             }
             $data['title'] = $validated['title'] ?? ($validated['service_type'] . ' Request');
-            $data['ticket_id'] = Ticket::generateTicketId();
+            $data['ticket_id'] = Ticket::generateTicketId($validated['service_type'] ?? null);
 
 
             // Branch Assignment Logic
@@ -307,7 +307,7 @@ class TicketController extends Controller
             $validated = $request->validate($rules);
 
             $data = $validated;
-            $data['ticket_id'] = Ticket::generateTicketId(); // Generate unique ticket ID
+            $data['ticket_id'] = Ticket::generateTicketId($data['service_type'] ?? null); // Generate unique ticket ID
 
             // Customers can only create tickets for themselves
             if ($user->isCustomer()) {

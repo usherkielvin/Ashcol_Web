@@ -88,13 +88,38 @@ class Ticket extends Model
     /**
      * Generate unique ticket ID
      */
-    public static function generateTicketId()
+    public static function generateTicketId(?string $serviceType = null)
     {
+        $prefix = self::getTicketPrefix($serviceType);
         do {
-            $ticketId = 'ASH-' . str_pad(rand(1, 9999), 4, '0', STR_PAD_LEFT);
+            $ticketId = $prefix . str_pad(rand(1, 9999), 4, '0', STR_PAD_LEFT);
         } while (self::where('ticket_id', $ticketId)->exists());
 
         return $ticketId;
+    }
+
+    private static function getTicketPrefix(?string $serviceType): string
+    {
+        if (!$serviceType) {
+            return 'SV';
+        }
+
+        $normalized = strtolower(trim($serviceType));
+
+        if (str_contains($normalized, 'maintain')) {
+            return 'MN';
+        }
+        if (str_contains($normalized, 'clean')) {
+            return 'CL';
+        }
+        if (str_contains($normalized, 'install')) {
+            return 'IN';
+        }
+        if (str_contains($normalized, 'repair')) {
+            return 'RP';
+        }
+
+        return 'SV';
     }
 
     /**

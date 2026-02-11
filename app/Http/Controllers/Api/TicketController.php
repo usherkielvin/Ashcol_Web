@@ -888,6 +888,7 @@ class TicketController extends Controller
                 'contact' => $ticket->contact ?? '',
                 'preferred_date' => $ticket->preferred_date?->format('Y-m-d'),
                 'scheduled_date' => $ticket->scheduled_date?->format('Y-m-d'),
+                'scheduled_time' => $ticket->scheduled_time,
                 'schedule_notes' => $ticket->schedule_notes,
                 'status' => $ticket->status->name ?? 'Unknown',
                 'status_color' => $ticket->status->color ?? '#gray',
@@ -1317,6 +1318,54 @@ class TicketController extends Controller
             'completed_at' => now(),
         ]);
 
+        // Close the ticket when payment is completed
+        $ticket = $payment->ticket;
+        if ($ticket) {
+            $completedStatus = TicketStatus::where('name', 'Completed')->first();
+            if ($completedStatus) {
+                $ticket->update([
+                    'status_id' => $completedStatus->id,
+                    'status_detail' => 'completed',
+                ]);
+
+                // Sync ticket completion to Firestore
+                try {
+                    $firestoreService = new FirestoreService();
+                    if ($firestoreService->isAvailable()) {
+                        $syncedTicket = Ticket::with(['customer', 'assignedStaff', 'status', 'branch'])->find($ticket->id);
+                        
+                        $firestoreService->database()
+                            ->collection('tickets')
+                            ->document($syncedTicket->ticket_id)
+                            ->set([
+                                'id' => $syncedTicket->id,
+                                'ticketId' => $syncedTicket->ticket_id,
+                                'customerId' => $syncedTicket->customer_id,
+                                'customerEmail' => $syncedTicket->customer->email ?? null,
+                                'assignedTo' => $syncedTicket->assigned_staff_id,
+                                'assigned_staff' => $syncedTicket->assignedStaff
+                                    ? trim(($syncedTicket->assignedStaff->firstName ?? '') . ' ' . ($syncedTicket->assignedStaff->lastName ?? ''))
+                                    : null,
+                                'assigned_staff_email' => $syncedTicket->assignedStaff->email ?? null,
+                                'status' => $syncedTicket->status->name ?? 'Unknown',
+                                'statusDetail' => $syncedTicket->status_detail,
+                                'statusColor' => $syncedTicket->status->color ?? '#gray',
+                                'serviceType' => $syncedTicket->service_type,
+                                'amount' => $syncedTicket->amount,
+                                'description' => $syncedTicket->description,
+                                'scheduledDate' => $syncedTicket->scheduled_date,
+                                'scheduledTime' => $syncedTicket->scheduled_time,
+                                'branch' => $syncedTicket->branch->name ?? null,
+                                'updatedAt' => new \DateTime(),
+                            ], ['merge' => true]);
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Firestore ticket sync failed in payCustomerPayment: ' . $e->getMessage());
+                }
+            }
+        }
+
+        // Sync payment to Firestore
         try {
             $firestoreService = new FirestoreService();
             if ($firestoreService->isAvailable()) {
@@ -1339,6 +1388,10 @@ class TicketController extends Controller
                 'id' => $payment->id,
                 'status' => $payment->status,
                 'completed_at' => $payment->completed_at?->format('Y-m-d H:i:s'),
+            ],
+            'ticket' => [
+                'ticket_id' => $ticket->ticket_id ?? null,
+                'status' => $ticket->status->name ?? null,
             ],
         ]);
     }
