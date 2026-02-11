@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Payment;
 use App\Models\Ticket;
 use App\Models\TicketStatus;
+use App\Services\FirestoreService;
 use App\Services\FirebaseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -86,6 +88,67 @@ class PaymentRequestController extends Controller
 
             $ticket->status_id = $pendingPaymentStatus->id;
             $ticket->save();
+
+            $ticket->load(['customer', 'assignedStaff', 'status', 'branch']);
+
+            $payment = Payment::create([
+                'ticket_id' => $ticket->ticket_id,
+                'ticket_table_id' => $ticket->id,
+                'customer_id' => $ticket->customer_id,
+                'technician_id' => $ticket->assigned_staff_id,
+                'payment_method' => 'online',
+                'amount' => $ticket->amount ?? 0,
+                'status' => 'pending',
+            ]);
+
+            try {
+                $firestoreService = new FirestoreService();
+                if ($firestoreService->isAvailable()) {
+                    $firestoreService->database()
+                        ->collection('tickets')
+                        ->document($ticket->ticket_id)
+                        ->set([
+                            'id' => $ticket->id,
+                            'ticketId' => $ticket->ticket_id,
+                            'customerId' => $ticket->customer_id,
+                            'customerEmail' => $ticket->customer->email ?? null,
+                            'assignedTo' => $ticket->assigned_staff_id,
+                            'assigned_staff' => $ticket->assignedStaff
+                                ? trim(($ticket->assignedStaff->firstName ?? '') . ' ' . ($ticket->assignedStaff->lastName ?? ''))
+                                : null,
+                            'assigned_staff_email' => $ticket->assignedStaff->email ?? null,
+                            'status' => $ticket->status->name ?? 'Unknown',
+                            'statusDetail' => $ticket->status_detail,
+                            'statusColor' => $ticket->status->color ?? '#gray',
+                            'serviceType' => $ticket->service_type,
+                            'amount' => $ticket->amount,
+                            'description' => $ticket->description,
+                            'scheduledDate' => $ticket->scheduled_date,
+                            'scheduledTime' => $ticket->scheduled_time,
+                            'branch' => $ticket->branch->name ?? null,
+                            'updatedAt' => new \DateTime(),
+                        ], ['merge' => true]);
+
+                    $firestoreService->database()
+                        ->collection('payments')
+                        ->document((string) $payment->id)
+                        ->set([
+                            'paymentId' => $payment->id,
+                            'ticketId' => $ticket->ticket_id,
+                            'customerEmail' => $ticket->customer->email ?? null,
+                            'serviceName' => $ticket->service_type,
+                            'technicianName' => $ticket->assignedStaff
+                                ? trim(($ticket->assignedStaff->firstName ?? '') . ' ' . ($ticket->assignedStaff->lastName ?? ''))
+                                : null,
+                            'amount' => $payment->amount,
+                            'status' => $payment->status,
+                            'createdAt' => new \DateTime(),
+                            'updatedAt' => new \DateTime(),
+                        ], ['merge' => true]);
+                }
+            } catch (\Exception $e) {
+                Log::error('Firestore sync failed in payment request: ' . $e->getMessage());
+            }
 
             // Send FCM notification to customer
             $this->notifyCustomer($ticket);
