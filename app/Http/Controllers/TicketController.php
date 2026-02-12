@@ -399,10 +399,34 @@ class TicketController extends Controller
     /**
      * Display the specified ticket.
      */
-    public function show(Ticket $ticket): View
+    public function show(Request $request, Ticket $ticket)
     {
         $this->authorize('view', $ticket);
         $ticket->load(['customer', 'assignedStaff', 'status', 'comments.user']);
+        
+        // Return JSON for AJAX requests (auto-refresh)
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'ticket' => [
+                    'id' => $ticket->id,
+                    'ticket_id' => $ticket->ticket_id,
+                    'title' => $ticket->title,
+                    'description' => $ticket->description,
+                    'status' => [
+                        'name' => $ticket->status->name ?? 'Unknown',
+                        'color' => $ticket->status->color ?? '#gray',
+                    ],
+                    'assigned_staff' => $ticket->assignedStaff ? [
+                        'name' => $ticket->assignedStaff->firstName . ' ' . $ticket->assignedStaff->lastName,
+                        'email' => $ticket->assignedStaff->email,
+                    ] : null,
+                    'comments_count' => $ticket->comments->count(),
+                    'updated_at' => $ticket->updated_at->toIso8601String(),
+                    'created_at' => $ticket->created_at->toIso8601String(),
+                ],
+            ]);
+        }
         
         return view('tickets.show', [
             'ticket' => $ticket,

@@ -12,18 +12,18 @@
         </div>
     </x-slot>
 
-    <div class="py-12">
+    <div class="py-12" id="ticket-content">
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8 space-y-6">
             <!-- Ticket Details -->
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
                     <div class="flex justify-between items-start mb-4">
                         <div class="flex-1">
-                            <h3 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                            <h3 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2" id="ticket-title">
                                 {{ $ticket->title }}
                             </h3>
                             <div class="flex flex-wrap gap-2 mb-4">
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium" 
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium" id="ticket-status"
                                     style="background-color: {{ $ticket->status->color }}20; color: {{ $ticket->status->color }}">
                                     {{ $ticket->status->name }}
                                 </span>
@@ -32,12 +32,12 @@
                         </div>
                         <div class="text-right text-sm text-gray-500 dark:text-gray-400">
                             <p>Created {{ $ticket->created_at->diffForHumans() }}</p>
-                            <p>Updated {{ $ticket->updated_at->diffForHumans() }}</p>
+                            <p id="ticket-updated">Updated {{ $ticket->updated_at->diffForHumans() }}</p>
                         </div>
                     </div>
 
                     <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mb-4">
-                        <p class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ $ticket->description }}</p>
+                        <p class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap" id="ticket-description">{{ $ticket->description }}</p>
                     </div>
 
                     <div class="border-t border-gray-200 dark:border-gray-700 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -46,7 +46,7 @@
                             <p class="text-gray-900 dark:text-gray-100 font-medium">{{ $ticket->customer->name }}</p>
                             <p class="text-gray-500 dark:text-gray-400 text-xs">{{ $ticket->customer->email }}</p>
                         </div>
-                        <div>
+                        <div id="assigned-staff-section">
                             <p class="text-gray-500 dark:text-gray-400">Assigned Technician:</p>
                             @if($ticket->assignedStaff)
                                 <p class="text-gray-900 dark:text-gray-100 font-medium">{{ $ticket->assignedStaff->name }}</p>
@@ -63,7 +63,7 @@
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                        Comments ({{ $ticket->comments->count() }})
+                        Comments (<span id="comment-count">{{ $ticket->comments->count() }}</span>)
                     </h3>
 
                     <!-- Add Comment Form -->
@@ -84,7 +84,7 @@
                     </form>
 
                     <!-- Comments List -->
-                    <div class="space-y-4">
+                    <div class="space-y-4" id="comments-list">
                         @forelse($ticket->comments as $comment)
                             <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                                 <div class="flex justify-between items-start">
@@ -129,5 +129,88 @@
             </div>
         </div>
     </div>
-</x-app-layout>
 
+    @push('scripts')
+    <script>
+        // Auto-refresh ticket details every 5 seconds for customers
+        let lastUpdatedAt = '{{ $ticket->updated_at->toIso8601String() }}';
+        let refreshInterval;
+
+        function refreshTicketDetails() {
+            fetch('{{ route("tickets.show", $ticket) }}', {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.ticket && data.ticket.updated_at !== lastUpdatedAt) {
+                    console.log('Ticket updated, refreshing content...');
+                    lastUpdatedAt = data.ticket.updated_at;
+                    
+                    // Update ticket status
+                    const statusEl = document.getElementById('ticket-status');
+                    if (statusEl && data.ticket.status) {
+                        statusEl.textContent = data.ticket.status.name;
+                        statusEl.style.backgroundColor = data.ticket.status.color + '20';
+                        statusEl.style.color = data.ticket.status.color;
+                    }
+                    
+                    // Update assigned staff if changed
+                    if (data.ticket.assigned_staff) {
+                        const staffSection = document.getElementById('assigned-staff-section');
+                        if (staffSection) {
+                            staffSection.innerHTML = `
+                                <p class="text-gray-500 dark:text-gray-400">Assigned Technician:</p>
+                                <p class="text-gray-900 dark:text-gray-100 font-medium">${data.ticket.assigned_staff.name}</p>
+                                <p class="text-gray-500 dark:text-gray-400 text-xs">${data.ticket.assigned_staff.email}</p>
+                            `;
+                        }
+                    }
+                    
+                    // Update comment count if changed
+                    if (data.ticket.comments_count !== undefined) {
+                        const commentCount = document.getElementById('comment-count');
+                        if (commentCount) {
+                            commentCount.textContent = data.ticket.comments_count;
+                        }
+                    }
+                    
+                    // Show subtle notification
+                    showUpdateNotification();
+                }
+            })
+            .catch(error => {
+                console.error('Error refreshing ticket:', error);
+            });
+        }
+
+        function showUpdateNotification() {
+            // Create a subtle notification
+            const notification = document.createElement('div');
+            notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 transition-opacity duration-300';
+            notification.textContent = 'Ticket updated';
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 300);
+            }, 2000);
+        }
+
+        // Start auto-refresh for customers only
+        @if(auth()->user()->isCustomer())
+            refreshInterval = setInterval(refreshTicketDetails, 5000);
+            console.log('Auto-refresh enabled for customer ticket view');
+        @endif
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+    @endpush
+</x-app-layout>

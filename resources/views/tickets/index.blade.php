@@ -48,12 +48,12 @@
             </div>
 
             <!-- Tickets List -->
-            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+            <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg" id="tickets-container">
                 @if($tickets->count() > 0)
                     <div class="p-6">
-                        <div class="space-y-4">
+                        <div class="space-y-4" id="tickets-list">
                             @foreach($tickets as $ticket)
-                                <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                                <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition" data-ticket-id="{{ $ticket->id }}">
                                     <div class="flex justify-between items-start">
                                         <div class="flex-1">
                                             <a href="{{ route('tickets.show', $ticket) }}" class="text-lg font-semibold text-gray-900 dark:text-gray-100 hover:text-indigo-600 dark:hover:text-indigo-400">
@@ -63,17 +63,17 @@
                                                 {{ \Illuminate\Support\Str::limit($ticket->description, 150) }}
                                             </p>
                                             <div class="mt-2 flex flex-wrap gap-2">
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" 
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ticket-status" 
                                                     style="background-color: {{ $ticket->status->color }}20; color: {{ $ticket->status->color }}">
                                                     {{ $ticket->status->name }}
                                                 </span>
 
                                                 @if($ticket->assignedStaff)
-                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
+                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200 ticket-assigned">
                                                         Assigned to {{ $ticket->assignedStaff->name }}
                                                     </span>
                                                 @else
-                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 ticket-assigned">
                                                         Unassigned
                                                     </span>
                                                 @endif
@@ -108,5 +108,67 @@
             </div>
         </div>
     </div>
-</x-app-layout>
 
+    @push('scripts')
+    <script>
+        // Auto-refresh ticket list every 10 seconds for customers
+        let refreshInterval;
+
+        function refreshTicketList() {
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('ajax', '1');
+            
+            fetch(currentUrl.toString(), {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'text/html'
+                }
+            })
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newTicketsList = doc.querySelector('#tickets-list');
+                const currentTicketsList = document.querySelector('#tickets-list');
+                
+                if (newTicketsList && currentTicketsList) {
+                    // Check if content actually changed
+                    if (newTicketsList.innerHTML !== currentTicketsList.innerHTML) {
+                        console.log('Ticket list updated, refreshing...');
+                        currentTicketsList.innerHTML = newTicketsList.innerHTML;
+                        showUpdateNotification();
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error refreshing ticket list:', error);
+            });
+        }
+
+        function showUpdateNotification() {
+            const notification = document.createElement('div');
+            notification.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 transition-opacity duration-300';
+            notification.textContent = 'Tickets updated';
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 300);
+            }, 2000);
+        }
+
+        // Start auto-refresh for customers only
+        @if(auth()->user()->isCustomer())
+            refreshInterval = setInterval(refreshTicketList, 10000);
+            console.log('Auto-refresh enabled for customer ticket list');
+        @endif
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+    @endpush
+</x-app-layout>
