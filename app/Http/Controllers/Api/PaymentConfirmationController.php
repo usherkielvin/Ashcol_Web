@@ -74,15 +74,21 @@ class PaymentConfirmationController extends Controller
                 ->orderByDesc('id')
                 ->first();
 
+            // Determine payment status based on payment method
+            // Cash: pending (waiting for technician to confirm receipt)
+            // Online: collected (auto-confirmed)
+            $paymentStatus = ($paymentMethod === 'cash') ? 'pending' : 'collected';
+            $collectedAt = ($paymentMethod === 'cash') ? null : now();
+
             if ($payment && $payment->status === 'pending') {
                 $payment->update([
                     'customer_id' => $customerId,
                     'technician_id' => $ticket->assigned_staff_id,
                     'payment_method' => $paymentMethod,
                     'amount' => $amount,
-                    'status' => 'collected',
+                    'status' => $paymentStatus,
                     'confirmed_at' => now(),
-                    'collected_at' => now(),
+                    'collected_at' => $collectedAt,
                 ]);
             } else {
                 $payment = $this->createPaymentRecord([
@@ -92,30 +98,36 @@ class PaymentConfirmationController extends Controller
                     'technician_id' => $ticket->assigned_staff_id,
                     'payment_method' => $paymentMethod,
                     'amount' => $amount,
-                    'status' => 'collected',
+                    'status' => $paymentStatus,
                     'confirmed_at' => now(),
-                    'collected_at' => now(),
+                    'collected_at' => $collectedAt,
                 ]);
             }
 
-            // Update ticket status to Completed
-            $completedStatus = TicketStatus::where('name', 'Completed')->first();
-            
-            if (!$completedStatus) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Completed status not found in system'
-                ], 500);
-            }
+            // Only update ticket status to Completed if payment method is online
+            // For cash, keep ticket in pending payment status until technician confirms
+            $ticketCompleted = false;
+            if ($paymentMethod !== 'cash') {
+                $completedStatus = TicketStatus::where('name', 'Completed')->first();
+                
+                if (!$completedStatus) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Completed status not found in system'
+                    ], 500);
+                }
 
-            $ticket->status_id = $completedStatus->id;
-            $ticket->save();
+                $ticket->status_id = $completedStatus->id;
+                $ticket->save();
+                $ticketCompleted = true;
+            }
 
             try {
                 $ticket->load(['customer', 'assignedStaff', 'status', 'branch']);
                 $payment->load(['technician', 'customer']);
                 $firestoreService = new FirestoreService();
                 if ($firestoreService->isAvailable()) {
+                    // Update ticket in Firestore
                     $firestoreService->database()
                         ->collection('tickets')
                         ->document($ticket->ticket_id)
@@ -141,6 +153,8 @@ class PaymentConfirmationController extends Controller
                             'updatedAt' => new \DateTime(),
                         ], ['merge' => true]);
 
+                    // Update payment in Firestore with correct status
+                    $firestoreStatus = ($paymentMethod === 'cash') ? 'pending' : 'completed';
                     $firestoreService->database()
                         ->collection('payments')
                         ->document((string) $payment->id)
@@ -153,7 +167,8 @@ class PaymentConfirmationController extends Controller
                                 ? ($payment->technician->firstName . ' ' . $payment->technician->lastName)
                                 : null,
                             'amount' => $payment->amount,
-                            'status' => 'completed',
+                            'paymentMethod' => $paymentMethod,
+                            'status' => $firestoreStatus,
                             'createdAt' => new \DateTime(),
                             'updatedAt' => new \DateTime(),
                         ], ['merge' => true]);
@@ -163,11 +178,15 @@ class PaymentConfirmationController extends Controller
             }
 
             // Send FCM notification to technician
-            $this->notifyTechnician($ticket, $payment);
+            $this->notifyTechnician($ticket, $payment, $paymentMethod);
+
+            $responseMessage = ($paymentMethod === 'cash') 
+                ? 'Payment method selected. Please pay the technician in cash.'
+                : 'Payment confirmed successfully. Your ticket is now completed.';
 
             return response()->json([
                 'success' => true,
-                'message' => 'Payment confirmed successfully',
+                'message' => $responseMessage,
                 'payment' => [
                     'id' => $payment->id,
                     'ticket_id' => $payment->ticket_id,
@@ -176,7 +195,8 @@ class PaymentConfirmationController extends Controller
                     'status' => $payment->status,
                     'confirmed_at' => $payment->confirmed_at
                 ],
-                'ticket_status' => 'Completed'
+                'ticket_status' => $ticketCompleted ? 'Completed' : 'Pending Payment',
+                'requires_cash_confirmation' => ($paymentMethod === 'cash')
             ], 200);
 
         } catch (\Exception $e) {
@@ -225,7 +245,7 @@ class PaymentConfirmationController extends Controller
     /**
      * Send FCM notification to technician
      */
-    private function notifyTechnician(Ticket $ticket, Payment $payment)
+    private function notifyTechnician(Ticket $ticket, Payment $payment, $paymentMethod)
     {
         try {
             $technician = $ticket->assignedStaff;
@@ -238,14 +258,23 @@ class PaymentConfirmationController extends Controller
                 return;
             }
 
+            $title = ($paymentMethod === 'cash') 
+                ? 'Customer Selected Cash Payment'
+                : 'Payment Confirmed';
+            
+            $body = ($paymentMethod === 'cash')
+                ? 'Customer will pay in cash for ticket #' . $ticket->ticket_id
+                : 'Customer has completed online payment for ticket #' . $ticket->ticket_id;
+
             $notificationData = [
-                'title' => 'Payment Confirmed',
-                'body' => 'Customer has confirmed payment for ticket #' . $ticket->ticket_id,
+                'title' => $title,
+                'body' => $body,
                 'data' => [
                     'type' => 'payment_confirmed',
                     'ticket_id' => $ticket->ticket_id,
                     'payment_method' => $payment->payment_method,
-                    'amount' => $payment->amount
+                    'amount' => $payment->amount,
+                    'requires_confirmation' => ($paymentMethod === 'cash')
                 ]
             ];
 
@@ -258,7 +287,8 @@ class PaymentConfirmationController extends Controller
 
             Log::info('Payment confirmation notification sent', [
                 'ticket_id' => $ticket->ticket_id,
-                'technician_id' => $technician->id
+                'technician_id' => $technician->id,
+                'payment_method' => $paymentMethod
             ]);
 
         } catch (\Exception $e) {

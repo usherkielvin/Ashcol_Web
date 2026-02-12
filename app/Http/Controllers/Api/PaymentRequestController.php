@@ -87,15 +87,43 @@ class PaymentRequestController extends Controller
 
             $ticket->load(['customer', 'assignedStaff', 'status', 'branch']);
 
-            $payment = Payment::create([
-                'ticket_id' => $ticket->ticket_id,
-                'ticket_table_id' => $ticket->id,
-                'customer_id' => $ticket->customer_id,
-                'technician_id' => $ticket->assigned_staff_id,
-                'payment_method' => 'online',
-                'amount' => $ticket->amount ?? 0,
-                'status' => 'pending',
-            ]);
+            // Check if payment already exists for this ticket
+            $payment = Payment::where('ticket_id', $ticket->ticket_id)
+                ->whereIn('status', ['pending', 'collected'])
+                ->orderByDesc('id')
+                ->first();
+
+            // Only create new payment if none exists
+            if (!$payment) {
+                $payment = Payment::create([
+                    'ticket_id' => $ticket->ticket_id,
+                    'ticket_table_id' => $ticket->id,
+                    'customer_id' => $ticket->customer_id,
+                    'technician_id' => $ticket->assigned_staff_id,
+                    'payment_method' => 'online',
+                    'amount' => $ticket->amount ?? 0,
+                    'status' => 'pending',
+                ]);
+                
+                $shouldNotify = true; // Send notification for new payment
+                $isNewPayment = true;
+                Log::info('New payment created for ticket', [
+                    'ticket_id' => $ticket->ticket_id,
+                    'payment_id' => $payment->id
+                ]);
+            } else {
+                // Payment exists - this is a reopen/reminder scenario
+                $shouldNotify = true; // Always send notification to remind customer
+                $isNewPayment = false;
+                
+                // Update the payment timestamp to show it's been re-requested
+                $payment->touch();
+                
+                Log::info('Existing payment found, sending reminder notification', [
+                    'ticket_id' => $ticket->ticket_id,
+                    'payment_id' => $payment->id
+                ]);
+            }
 
             try {
                 $firestoreService = new FirestoreService();
@@ -146,14 +174,18 @@ class PaymentRequestController extends Controller
                 Log::error('Firestore sync failed in payment request: ' . $e->getMessage());
             }
 
-            // Send FCM notification to customer
-            $this->notifyCustomer($ticket);
+            // Send FCM notification to customer (for new payments and reminders)
+            if ($shouldNotify) {
+                $this->notifyCustomer($ticket, $isNewPayment);
+            }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Payment request sent successfully',
+                'message' => $isNewPayment ? 'Payment request sent successfully' : 'Payment reminder sent to customer',
                 'ticket_status' => 'Pending Payment',
-                'ticket_id' => $ticket->ticket_id
+                'ticket_id' => $ticket->ticket_id,
+                'payment_id' => $payment->id,
+                'is_reminder' => !$isNewPayment
             ], 200);
 
         } catch (\Exception $e) {
@@ -192,7 +224,7 @@ class PaymentRequestController extends Controller
     /**
      * Send FCM notification to customer
      */
-    private function notifyCustomer(Ticket $ticket)
+    private function notifyCustomer(Ticket $ticket, bool $isNewPayment = true)
     {
         try {
             $customer = $ticket->customer;
@@ -205,14 +237,20 @@ class PaymentRequestController extends Controller
                 return;
             }
 
+            $title = $isNewPayment ? 'Payment Request' : 'Payment Reminder';
+            $body = $isNewPayment 
+                ? 'Your technician has requested payment for ticket #' . $ticket->ticket_id
+                : 'Reminder: Please complete payment for ticket #' . $ticket->ticket_id;
+
             $notificationData = [
-                'title' => 'Payment Request',
-                'body' => 'Your technician has requested payment for ticket #' . $ticket->ticket_id,
+                'title' => $title,
+                'body' => $body,
                 'data' => [
                     'type' => 'payment_request',
                     'ticket_id' => $ticket->ticket_id,
                     'amount' => $ticket->amount ?? 0,
-                    'action' => 'pay_now'
+                    'action' => 'pay_now',
+                    'is_reminder' => !$isNewPayment
                 ]
             ];
 
@@ -223,9 +261,10 @@ class PaymentRequestController extends Controller
                 $notificationData['data']
             );
 
-            Log::info('Payment request notification sent', [
+            Log::info('Payment notification sent', [
                 'ticket_id' => $ticket->ticket_id,
-                'customer_id' => $customer->id
+                'customer_id' => $customer->id,
+                'is_reminder' => !$isNewPayment
             ]);
 
         } catch (\Exception $e) {

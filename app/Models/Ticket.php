@@ -148,16 +148,24 @@ class Ticket extends Model
 
     /**
      * Check if ticket can have payment requested
-     * Ticket must be ongoing (work done) or completed, and not have a payment yet
+     * Ticket must be ongoing (work done) or completed, and not already have a pending/collected payment
      */
     public function canRequestPayment(): bool
     {
         // Get the status name
         $statusName = $this->status ? $this->status->name : null;
         
-        // Check if status is 'Ongoing' or 'Completed' and no payment exists
-        // Technicians can request payment after finishing work (while still Ongoing)
-        return ($statusName === 'Ongoing' || $statusName === 'Completed') && !$this->hasPayment();
+        // Check if status is 'Ongoing' or 'Completed'
+        if ($statusName !== 'Ongoing' && $statusName !== 'Completed') {
+            return false;
+        }
+        
+        // Check if there's already a pending or collected payment
+        $existingPayment = $this->payment()
+            ->whereIn('status', ['pending', 'collected'])
+            ->exists();
+        
+        return !$existingPayment;
     }
 
     /**
