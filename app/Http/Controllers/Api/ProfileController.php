@@ -691,6 +691,29 @@ class ProfileController extends Controller
             // Update user profile_photo field
             $user->profile_photo = null;
             $user->save();
+            
+            // Clear cache
+            Cache::forget('user_' . $user->id);
+
+            // Sync to Firestore
+            try {
+                $firestoreService = new FirestoreService();
+                $firestoreService->database()
+                    ->collection('users')
+                    ->document((string)$user->id)
+                    ->set([
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'branch' => $user->branch,
+                        'role' => $user->role,
+                        'profilePhoto' => null,
+                        'updatedAt' => new \DateTime(),
+                    ], ['merge' => true]);
+            } catch (\Exception $e) {
+                // Log error but continue
+                \Illuminate\Support\Facades\Log::error('Firestore sync failed: ' . $e->getMessage());
+            }
 
             return response()->json([
                 'success' => true,

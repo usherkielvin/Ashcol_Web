@@ -826,13 +826,14 @@ class AuthController extends Controller
             
             if (!$user) {
                 // Don't reveal if email exists or not for security
+                // Return success but don't send email
                 return response()->json([
-                    'success' => true,
-                    'message' => 'If the email exists, a verification code has been sent.',
+                    'success' => false,
+                    'message' => 'Email not found. Please check your email address.',
                 ]);
             }
 
-            // Generate verification code
+            // Generate verification code ONLY if user exists
             $verificationCode = EmailVerification::generateCode();
             
             // Store verification code (expires in 10 minutes)

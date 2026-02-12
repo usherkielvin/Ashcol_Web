@@ -115,62 +115,92 @@ class ChatbotController extends Controller
      */
     private function generateKeywordResponse(string $message, ?int $userId): ?string
     {
+        // Get user name for personalization
+        $userName = 'there';
+        if ($userId) {
+            $user = User::find($userId);
+            $userName = $user ? ($user->firstName ?? 'there') : 'there';
+        }
+        
         // Greeting keywords
         if ($this->matchesKeywords($message, ['hi', 'hello', 'hey', 'greetings', 'good morning', 'good afternoon'])) {
-            return "Hello! 👋 Welcome to Ashcol Support. How can I help you today?";
+            return "Hello {$userName}! 👋 Welcome to Ashcol Support. How can I help you today?";
         }
 
         // Help/Support keywords
         if ($this->matchesKeywords($message, ['help', 'support', 'assist', 'how can you help'])) {
-            return "I can help you with:\n• Creating a ticket\n• Checking ticket status\n• General information\n• Contacting our team\n\nWhat would you like to do?";
+            return "Hi {$userName}! I can help you with:\n• 📋 Checking your ticket status\n• 🎫 Creating a new service request\n• 💰 Payment information\n• 📞 Contacting our team\n• ℹ️ General information\n\nWhat would you like to do?";
         }
 
         // Ticket creation keywords
-        if ($this->matchesKeywords($message, ['create', 'new ticket', 'report issue', 'submit issue', 'open ticket'])) {
-            return "To create a ticket, please:\n1. Visit our support page\n2. Click 'Create New Ticket'\n3. Fill in the details\n4. Submit\n\nOr contact our support team directly at support@ashcol.com";
+        if ($this->matchesKeywords($message, ['create', 'new ticket', 'report issue', 'submit issue', 'open ticket', 'book service', 'request service'])) {
+            return "To book a service, {$userName}:\n1. Go to the Home tab\n2. Tap 'Book a Service'\n3. Select your service type\n4. Fill in the details\n5. Submit your request\n\nOr contact our support team at support@ashcol.com for assistance!";
         }
 
         // Check ticket status
-        if ($this->matchesKeywords($message, ['ticket status', 'my tickets', 'check ticket', 'ticket update'])) {
+        if ($this->matchesKeywords($message, ['ticket status', 'my tickets', 'check ticket', 'ticket update', 'show tickets', 'view tickets'])) {
             if ($userId) {
                 // Check if message contains a ticket ID pattern (e.g., "ticket #123" or "ticket 123")
-                if (preg_match('/ticket\s*#?(\d+)/i', $message, $matches)) {
-                    $ticketId = (int)$matches[1];
+                if (preg_match('/ticket\s*#?(\w+)/i', $message, $matches)) {
+                    $ticketId = $matches[1];
                     return $this->getSpecificTicketStatus($userId, $ticketId);
                 }
                 return $this->getTicketStatus($userId);
             }
-            return "Please log in to check your ticket status. Once logged in, visit your dashboard to view your tickets.";
+            return "Please log in to check your ticket status, {$userName}. Once logged in, I can show you all your tickets!";
+        }
+
+        // Account information
+        if ($this->matchesKeywords($message, ['my account', 'account info', 'profile', 'my details'])) {
+            if ($userId) {
+                $user = User::find($userId);
+                if ($user) {
+                    $response = "Hi {$userName}! Here's your account info:\n\n";
+                    $response .= "📧 Email: {$user->email}\n";
+                    $response .= "👤 Username: {$user->username}\n";
+                    if ($user->branch) {
+                        $response .= "🏢 Branch: {$user->branch}\n";
+                    }
+                    $response .= "\nNeed to update your info? Go to Profile > Personal Info!";
+                    return $response;
+                }
+            }
+            return "Please log in to view your account information!";
         }
 
         // Services information
-        if ($this->matchesKeywords($message, ['services', 'what do you offer', 'what services', 'products'])) {
-            return "We offer various services including:\n• Technical Support\n• Consulting\n• System Integration\n• Maintenance & Updates\n\nFor more details, visit our Services page or contact us!";
+        if ($this->matchesKeywords($message, ['services', 'what do you offer', 'what services', 'products', 'service types'])) {
+            return "We offer various AC services, {$userName}:\n• 🧹 Cleaning Services\n• 🔧 Maintenance & Repair\n• ❄️ Installation\n• 🔍 Inspection\n• 🆘 Emergency Services\n\nTap 'Book Service' on the Home tab to get started!";
+        }
+
+        // Payment information
+        if ($this->matchesKeywords($message, ['payment', 'pay', 'how to pay', 'payment methods', 'cost', 'price'])) {
+            return "Payment information, {$userName}:\n\n💳 We accept:\n• Cash\n• GCash\n• PayMaya\n• Credit/Debit Cards\n\nYou can pay after service completion. Our technician will request payment when the work is done!";
         }
 
         // Contact/Email keywords
-        if ($this->matchesKeywords($message, ['contact', 'email', 'phone', 'call us', 'reach out'])) {
-            return "You can reach us at:\n📧 Email: support@ashcol.com\n📞 Phone: +1-800-ASHCOL-1\n💬 Chat with us here\n\nOur team is available Monday-Friday, 9 AM - 6 PM.";
+        if ($this->matchesKeywords($message, ['contact', 'email', 'phone', 'call us', 'reach out', 'support team'])) {
+            return "You can reach us at:\n📧 Email: support@ashcol.com\n📞 Phone: +63-XXX-XXXX\n💬 Chat with me here anytime!\n\nOur team is available Monday-Saturday, 8 AM - 6 PM.";
         }
 
         // FAQ keywords
         if ($this->matchesKeywords($message, ['faq', 'frequently asked', 'common questions', 'how do i'])) {
-            return "Here are some common questions:\n• How do I create a ticket?\n• What's the average response time?\n• How do I reset my password?\n• Can I track my ticket?\n\nAsk me any of these or tell me what you need!";
+            return "Here are some common questions, {$userName}:\n• How do I book a service?\n• How do I check my ticket status?\n• What payment methods do you accept?\n• How long does service take?\n• Can I reschedule my appointment?\n\nAsk me any of these or tell me what you need!";
         }
 
         // Account/Login keywords
-        if ($this->matchesKeywords($message, ['login', 'sign in', 'account', 'password', 'forgot password'])) {
-            return "For account issues:\n• Visit the login page\n• Click 'Forgot Password' to reset\n• Create a new account if you don't have one\n\nStill having trouble? Contact support@ashcol.com";
+        if ($this->matchesKeywords($message, ['login', 'sign in', 'account', 'password', 'forgot password', 'reset password'])) {
+            return "For account issues:\n• Tap 'Forgot Password' on the login screen to reset\n• Create a new account if you don't have one\n• Make sure you're using the correct email\n\nStill having trouble? Contact support@ashcol.com";
         }
 
         // Thank you keywords
         if ($this->matchesKeywords($message, ['thanks', 'thank you', 'appreciate', 'thanks for help'])) {
-            return "You're welcome! 😊 Is there anything else I can help you with?";
+            return "You're very welcome, {$userName}! 😊 Is there anything else I can help you with?";
         }
 
         // Goodbye keywords
         if ($this->matchesKeywords($message, ['bye', 'goodbye', 'see you', 'thanks bye', 'farewell'])) {
-            return "Thank you for contacting Ashcol Support! Have a great day! 👋";
+            return "Thank you for contacting Ashcol Support, {$userName}! Have a great day! 👋";
         }
 
         // No keyword match - return null to trigger AI response
@@ -202,34 +232,75 @@ class ChatbotController extends Controller
      */
     private function getTicketStatus(int $userId): string
     {
+        // Get user information
+        $user = User::find($userId);
+        $userName = $user ? ($user->firstName ?? 'there') : 'there';
+        
         // Get up to 5 most recent tickets for the user, ordered by most recent first
         $tickets = Ticket::where('customer_id', $userId)
-            ->with(['status', 'assignedStaff'])
             ->orderBy('created_at', 'desc')
             ->limit(5)
             ->get();
 
         if ($tickets->isEmpty()) {
-            return "You don't have any tickets yet. Would you like to create one?";
+            return "Hi {$userName}! 👋 You don't have any tickets yet. Would you like to create one? I can guide you through the process!";
         }
 
-        $response = "Here are your recent tickets:\n\n";
+        // Count tickets by status
+        $pendingCount = Ticket::where('customer_id', $userId)->where('status', 'pending')->count();
+        $ongoingCount = Ticket::where('customer_id', $userId)->whereIn('status', ['ongoing', 'in progress', 'assigned'])->count();
+        $completedCount = Ticket::where('customer_id', $userId)->whereIn('status', ['completed', 'resolved', 'closed'])->count();
+
+        $response = "Hi {$userName}! Here's your ticket summary:\n\n";
+        $response .= "📊 Overview:\n";
+        $response .= "   • Pending: {$pendingCount}\n";
+        $response .= "   • In Progress: {$ongoingCount}\n";
+        $response .= "   • Completed: {$completedCount}\n\n";
+        $response .= "📋 Recent Tickets:\n\n";
         
         foreach ($tickets as $ticket) {
-            $status = $ticket->status->name ?? 'Unknown';
-            $ticketTitle = $ticket->title ?? 'No title';
+            $status = ucfirst($ticket->status ?? 'Unknown');
+            $ticketTitle = $ticket->service_type ?? 'Service Request';
+            $statusEmoji = $this->getStatusEmoji($ticket->status);
             
-            $response .= "📌 Ticket ID: #{$ticket->id}\n";
-            $response .= "   Title: {$ticketTitle}\n";
+            $response .= "{$statusEmoji} Ticket #{$ticket->ticket_id}\n";
+            $response .= "   Service: {$ticketTitle}\n";
             $response .= "   Status: {$status}\n";
-            $response .= "   Created: " . $ticket->created_at->format('M d, Y') . "\n\n";
+            $response .= "   Date: " . $ticket->created_at->format('M d, Y') . "\n\n";
         }
 
         if ($tickets->count() >= 5) {
-            $response .= "Showing your 5 most recent tickets.";
+            $response .= "Showing your 5 most recent tickets. Need help with any of them?";
+        } else {
+            $response .= "Need help with any of these tickets? Just ask!";
         }
 
         return $response;
+    }
+
+    /**
+     * Get emoji for ticket status
+     *
+     * @param string|null $status
+     * @return string
+     */
+    private function getStatusEmoji(?string $status): string
+    {
+        if (!$status) return '📌';
+        
+        $status = strtolower($status);
+        
+        if (in_array($status, ['completed', 'resolved', 'closed'])) {
+            return '✅';
+        } elseif (in_array($status, ['ongoing', 'in progress', 'assigned'])) {
+            return '🔄';
+        } elseif ($status === 'pending') {
+            return '⏳';
+        } elseif (in_array($status, ['cancelled', 'rejected'])) {
+            return '❌';
+        }
+        
+        return '📌';
     }
 
     /**
@@ -241,26 +312,51 @@ class ChatbotController extends Controller
      */
     private function getSpecificTicketStatus(int $userId, int $ticketId): string
     {
+        // Get user information
+        $user = User::find($userId);
+        $userName = $user ? ($user->firstName ?? 'there') : 'there';
+        
         // Find the ticket and verify it belongs to the user
-        $ticket = Ticket::where('id', $ticketId)
+        $ticket = Ticket::where('ticket_id', $ticketId)
             ->where('customer_id', $userId)
-            ->with(['status', 'assignedStaff'])
             ->first();
 
         if (!$ticket) {
-            return "I couldn't find ticket #{$ticketId} in your account. Please check the ticket ID and try again.";
+            return "Hi {$userName}, I couldn't find ticket #{$ticketId} in your account. Please check the ticket ID and try again, or ask me to show all your tickets!";
         }
 
-        $status = $ticket->status->name ?? 'Unknown';
-        $ticketTitle = $ticket->title ?? 'No title';
+        $status = ucfirst($ticket->status ?? 'Unknown');
+        $ticketTitle = $ticket->service_type ?? 'Service Request';
+        $statusEmoji = $this->getStatusEmoji($ticket->status);
         
-        $response = "📌 Ticket ID: #{$ticket->id}\n";
-        $response .= "   Title: {$ticketTitle}\n";
+        $response = "Hi {$userName}! Here's the status of your ticket:\n\n";
+        $response .= "{$statusEmoji} Ticket #{$ticket->ticket_id}\n";
+        $response .= "   Service: {$ticketTitle}\n";
         $response .= "   Status: {$status}\n";
-        $response .= "   Created: " . $ticket->created_at->format('M d, Y') . "\n";
+        $response .= "   Created: " . $ticket->created_at->format('M d, Y h:i A') . "\n";
         
-        if ($ticket->assignedStaff) {
-            $response .= "   Assigned to: {$ticket->assignedStaff->firstName} {$ticket->assignedStaff->lastName}\n";
+        if ($ticket->assigned_to) {
+            $technician = User::find($ticket->assigned_to);
+            if ($technician) {
+                $response .= "   Assigned to: {$technician->firstName} {$technician->lastName}\n";
+            }
+        }
+        
+        if ($ticket->scheduled_date) {
+            $response .= "   Scheduled: " . \Carbon\Carbon::parse($ticket->scheduled_date)->format('M d, Y') . "\n";
+        }
+        
+        if ($ticket->amount) {
+            $response .= "   Amount: ₱" . number_format($ticket->amount, 2) . "\n";
+        }
+
+        // Add status-specific messages
+        if (in_array(strtolower($ticket->status), ['completed', 'resolved', 'closed'])) {
+            $response .= "\n✨ This ticket has been completed! Thank you for choosing Ashcol!";
+        } elseif (in_array(strtolower($ticket->status), ['ongoing', 'in progress'])) {
+            $response .= "\n🔧 Our technician is working on your request. Hang tight!";
+        } elseif (strtolower($ticket->status) === 'pending') {
+            $response .= "\n⏳ Your ticket is pending. We'll assign a technician soon!";
         }
 
         return $response;
